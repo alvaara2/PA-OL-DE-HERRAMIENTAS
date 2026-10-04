@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+  
+  .font-mono-code {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@keyframes pulse-danger {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+  }
+}
+
+.animate-overdue-alert {
+  animation: pulse-danger 1.8s infinite;
+}
+
+/* Tool rotation keyframes for rotating loader */
+@keyframes spin-gear-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-gear-ccw {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes wrench-orbit {
+  0% {
+    transform: rotate(0deg) translateX(36px) rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg) translateX(36px) rotate(-360deg);
+  }
+}
+
+@keyframes socket-orbit {
+  0% {
+    transform: rotate(90deg) translateX(36px) rotate(-90deg);
+  }
+  100% {
+    transform: rotate(450deg) translateX(36px) rotate(-450deg);
+  }
+}
+
+@keyframes screwdriver-orbit {
+  0% {
+    transform: rotate(180deg) translateX(36px) rotate(-180deg);
+  }
+  100% {
+    transform: rotate(540deg) translateX(36px) rotate(-540deg);
+  }
+}
+
+@keyframes hammer-orbit {
+  0% {
+    transform: rotate(270deg) translateX(36px) rotate(-270deg);
+  }
+  100% {
+    transform: rotate(630deg) translateX(36px) rotate(-630deg);
+  }
+}
+
+@keyframes tool-self-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-gear {
+  animation: spin-gear-cw 5s linear infinite;
+}
+
+.animate-spin-gear-reverse {
+  animation: spin-gear-ccw 3.5s linear infinite;
+}
+
+.animate-wrench-orbit {
+  animation: wrench-orbit 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-socket-orbit {
+  animation: socket-orbit 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-screwdriver-orbit {
+  animation: screwdriver-orbit 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-hammer-orbit {
+  animation: hammer-orbit 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-tool-self-spin {
+  animation: tool-self-spin 2s linear infinite;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .page-break {
+    page-break-after: always;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "PañolPro - Control y Préstamo de Herramientas y Dados",
+  "description": "Sistema integral de codificación física de activos, rotulado QR, despacho con firma digital y monitor de sobretiempo >24h para talleres y pañoles industriales.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
