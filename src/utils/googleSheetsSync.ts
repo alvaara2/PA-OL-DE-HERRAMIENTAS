@@ -1,4 +1,4 @@
-import { KardexEntry } from '../types/workshop';
+import { KardexEntry, PhysicalAsset, Technician } from '../types/workshop';
 
 export const GOOGLE_APPS_SCRIPT_WEBHOOK_URL =
   'https://script.google.com/macros/s/AKfycbyTk9GPiRK3XnEtzCrwqtAgDIB2vw_fkdb4rNe4Sa3LcfOePl4JIPKQrCd0ePBplVJq/exec';
@@ -6,19 +6,35 @@ export const GOOGLE_APPS_SCRIPT_WEBHOOK_URL =
 export const GOOGLE_SHEETS_KARDEX_VIEW_URL =
   'https://docs.google.com/spreadsheets/d/1v1bnjUKBr4r3HrJ75VUCgCUqAKBTuPUiuqSNXbyAc2E/edit';
 
-export interface MovementPayload {
-  id: string;
-  tipo: string; // 'Salida', 'Devolución', 'Mantenimiento', etc.
-  codigoHerramienta: string;
-  nombreHerramienta: string;
-  dniTecnico?: string;
-  nombreTecnico?: string;
-  encargadoTurno: string;
-  observaciones?: string;
+export type GoogleSheetTab = 'Kardex' | 'Herramientas' | 'Personal';
+
+/**
+ * Función principal y canónica de sincronización con Google Sheets
+ * Utiliza 'text/plain;charset=utf-8' y 'no-cors' para evitar preflight OPTIONS de CORS en el navegador.
+ */
+export async function syncToGoogleSheets(hoja: GoogleSheetTab | string, filaArray: any[]): Promise<boolean> {
+  try {
+    await fetch(GOOGLE_APPS_SCRIPT_WEBHOOK_URL, {
+      method: 'POST',
+      mode: 'no-cors', // Evita el bloqueo del navegador
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        hoja: hoja, // 'Kardex', 'Herramientas', o 'Personal'
+        fila: filaArray,
+      }),
+    });
+    console.log(`[Google Sheets] Fila enviada con éxito a la hoja: ${hoja}`);
+    return true;
+  } catch (error) {
+    console.error('Error al sincronizar con Google Sheets:', error);
+    return false;
+  }
 }
 
 /**
- * Normalizes Kardex entry type into a clean Spanish description
+ * Normaliza el tipo de evento de Kardex a texto legible en español
  */
 export function formatMovementTypeLabel(tipo: string): string {
   switch (tipo) {
@@ -40,43 +56,35 @@ export function formatMovementTypeLabel(tipo: string): string {
 }
 
 /**
- * Dispatches a real-time background fetch to the Google Apps Script Webhook
- * Sends { hoja: 'Kardex', fila: [...] } with mode: 'no-cors'
+ * Sincroniza un movimiento individual de pañol con la hoja 'Kardex'
  */
-export async function dispatchMovementToAppsScript(mov: MovementPayload): Promise<boolean> {
-  const payload = {
-    hoja: 'Kardex',
-    fila: [
-      mov.id,
-      new Date().toLocaleString('es-PE'),
-      mov.tipo,
-      mov.codigoHerramienta,
-      mov.nombreHerramienta,
-      mov.dniTecnico || '-',
-      mov.nombreTecnico || '-',
-      mov.encargadoTurno,
-      mov.observaciones || '',
-    ],
-  };
+export async function dispatchMovementToAppsScript(mov: {
+  id: string;
+  tipo: string;
+  codigoHerramienta: string;
+  nombreHerramienta: string;
+  dniTecnico?: string;
+  nombreTecnico?: string;
+  encargadoTurno: string;
+  observaciones?: string;
+}): Promise<boolean> {
+  const fila = [
+    mov.id,
+    new Date().toLocaleString('es-PE'),
+    mov.tipo,
+    mov.codigoHerramienta,
+    mov.nombreHerramienta,
+    mov.dniTecnico || '-',
+    mov.nombreTecnico || '-',
+    mov.encargadoTurno,
+    mov.observaciones || '',
+  ];
 
-  try {
-    await fetch(GOOGLE_APPS_SCRIPT_WEBHOOK_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-    return true;
-  } catch (err) {
-    console.warn('Google Apps Script background sync failed (offline or network error):', err);
-    return false;
-  }
+  return syncToGoogleSheets('Kardex', fila);
 }
 
 /**
- * Helper to dispatch multiple movements in background
+ * Envia en lote registros de Kardex a Google Sheets
  */
 export async function dispatchKardexEntriesToAppsScript(
   entries: KardexEntry[],
@@ -94,4 +102,49 @@ export async function dispatchKardexEntriesToAppsScript(
       observaciones: entry.observaciones,
     });
   }
+}
+
+/**
+ * Sincroniza una herramienta con la hoja 'Herramientas' de Google Sheets
+ * Incluye Código Mnemotécnico + DNI Numérico
+ */
+export async function dispatchToolToAppsScript(asset: PhysicalAsset): Promise<boolean> {
+  const dniNum = asset.dniNumerico || '-';
+  const fila = [
+    asset.id,
+    asset.codigoActivoFisico, // Código Mnemotécnico
+    dniNum,                  // DNI Numérico Aleatorio
+    asset.descripcion,
+    asset.categoria,
+    asset.marca,
+    asset.medida || '-',
+    asset.encastre || '-',
+    asset.ubicacion,
+    asset.estado.toUpperCase(),
+    asset.condicionFisica.toUpperCase(),
+    asset.calibracion?.requiereCalibracion ? 'SI' : 'NO',
+    asset.calibracion?.fechaVencimiento || '-',
+    new Date().toLocaleString('es-PE'),
+  ];
+
+  return syncToGoogleSheets('Herramientas', fila);
+}
+
+/**
+ * Sincroniza un trabajador con la hoja 'Personal' de Google Sheets
+ */
+export async function dispatchWorkerToAppsScript(tech: Technician): Promise<boolean> {
+  const fila = [
+    tech.id,
+    tech.dni,
+    tech.nombreCompleto,
+    tech.cargo,
+    tech.area,
+    tech.correo || '-',
+    tech.celular || '-',
+    tech.activo ? 'ACTIVO' : 'INACTIVO',
+    tech.fechaRegistro,
+  ];
+
+  return syncToGoogleSheets('Personal', fila);
 }

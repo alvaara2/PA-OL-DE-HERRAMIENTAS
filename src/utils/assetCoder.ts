@@ -226,6 +226,44 @@ export function generateUniquePhysicalCode(
 }
 
 /**
+ * Generates an 8-digit unique random numeric DNI for tools (e.g. "74892015")
+ * Ideal for numeric barcode scanners, fast keypad entry, and unique identification.
+ */
+export function generateRandomToolDni(existingDnis: (string | undefined)[] = []): string {
+  const existingSet = new Set(
+    existingDnis
+      .filter(Boolean)
+      .map((d) => String(d).trim())
+  );
+  let candidate = '';
+  let attempts = 0;
+
+  do {
+    // Generate an 8-digit number between 10000000 and 99999999
+    const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+    candidate = randomNum.toString();
+    attempts++;
+  } while (existingSet.has(candidate) && attempts < 10000);
+
+  return candidate;
+}
+
+/**
+ * Generates the complete dual coding system for workshop physical assets:
+ * 1. Código Mnemotécnico (Placa Física / Alfanumérico, ej. DAD-IMP-1/2-17MM-001)
+ * 2. DNI Numérico Aleatorio (8 dígitos únicos, ej. 84920153)
+ */
+export function generateDualToolCodes(
+  params: AutoCodeParams,
+  existingMnemotecnicos: string[] = [],
+  existingDnis: (string | undefined)[] = []
+): { codigoMnemotecnico: string; dniNumerico: string } {
+  const codigoMnemotecnico = generateUniquePhysicalCode(params, existingMnemotecnicos);
+  const dniNumerico = generateRandomToolDni(existingDnis);
+  return { codigoMnemotecnico, dniNumerico };
+}
+
+/**
  * Suggested shadow board / rack location based on tool type
  */
 export function suggestLocation(category: AssetCategory, isImpact: boolean): string {

@@ -32,7 +32,9 @@ export interface CalibrationData {
 
 export interface PhysicalAsset {
   id: string;
-  codigoActivoFisico: string; // e.g. DAD-IMP-1/2-17MM-001, TORQ-SNA-001
+  codigoActivoFisico: string; // e.g. DAD-IMP-1/2-17MM-001, TORQ-SNA-001 (Código Mnemotécnico Principal)
+  codigoMnemotecnico?: string; // Código Mnemotécnico estructurado (placa física alfanumérica)
+  dniNumerico?: string; // DNI Numérico Aleatorio único de 8 dígitos para lectura rápida (e.g. 74892015)
   descripcion: string;
   categoria: AssetCategory;
   familia: string; // e.g. DADOS, TORQUIMETROS, TALADROS
