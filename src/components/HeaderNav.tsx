@@ -15,7 +15,9 @@ import {
   ShieldCheck,
   ChevronDown,
   Tv,
-  Trash2
+  Trash2,
+  Download,
+  Upload
 } from 'lucide-react';
 import { LoanDispatch, StorekeeperProfile } from '../types/workshop';
 import { calculateLoanAlert } from '../utils/timeAlerts';
@@ -43,6 +45,8 @@ interface HeaderNavProps {
   onOpenScanner: () => void;
   onOpenCheckpoints: () => void;
   onOpenBulkDelete: () => void;
+  onDownloadManualCheckpoint?: () => void;
+  onTriggerRestoreCheckpoint?: () => void;
   syncState: 'synced' | 'syncing' | 'offline';
   onManualSync: () => void;
 }
@@ -57,6 +61,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   onOpenScanner,
   onOpenCheckpoints,
   onOpenBulkDelete,
+  onDownloadManualCheckpoint,
+  onTriggerRestoreCheckpoint,
   syncState,
   onManualSync,
 }) => {
@@ -137,12 +143,38 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             {/* Checkpoints & Backup Button */}
             <button
               onClick={onOpenCheckpoints}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 transition"
-              title="Puntos de restauración y copias de seguridad"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              title="Puntos de restauración y copias de seguridad automáticas"
             >
               <History className="w-3.5 h-3.5 text-blue-600" />
               <span className="hidden md:inline">Checkpoints</span>
             </button>
+
+            {/* Botón A: Crear Checkpoint Manual (Descargar .JSON) */}
+            {onDownloadManualCheckpoint && (
+              <button
+                type="button"
+                onClick={onDownloadManualCheckpoint}
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition cursor-pointer shadow-2xs"
+                title="💾 Crear Checkpoint Manual (Descargar .JSON con todo el estado del almacén)"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span>💾 Checkpoint .JSON</span>
+              </button>
+            )}
+
+            {/* Botón B: Restaurar desde Checkpoint (.JSON) */}
+            {onTriggerRestoreCheckpoint && (
+              <button
+                type="button"
+                onClick={onTriggerRestoreCheckpoint}
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 transition cursor-pointer shadow-2xs"
+                title="📂 Restaurar desde Checkpoint (.JSON)"
+              >
+                <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                <span>📂 Restaurar .JSON</span>
+              </button>
+            )}
 
             {/* Menú de Borrado en General / Purga Masiva */}
             <button

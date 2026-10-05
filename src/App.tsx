@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HeaderNav, ActiveTab } from './components/HeaderNav';
 import { WorkshopDashboardView } from './components/WorkshopDashboardView';
 import { AlertMonitorView } from './components/AlertMonitorView';
@@ -41,8 +41,13 @@ import {
 import { calculateLoanAlert } from './utils/timeAlerts';
 import { evaluateCalibration } from './utils/calibrationHelper';
 import { sendEmailWithTimeout, buildCalibrationAlertEmailHtml } from './utils/emailService';
-import { FullBackupPayload } from './utils/indexedDBStorage';
-import { AlertOctagon, RotateCw, Lock } from 'lucide-react';
+import { 
+  FullBackupPayload, 
+  exportManualCheckpointJSON, 
+  parseFullBackupJSON 
+} from './utils/indexedDBStorage';
+import { dispatchKardexEntriesToAppsScript } from './utils/googleSheetsSync';
+import { AlertOctagon, RotateCw, Lock, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 
 const STORAGE_KEYS = {
   ASSETS: 'panolpro_assets_v45',
@@ -239,6 +244,9 @@ export default function App() {
   const [showDemoLoader, setShowDemoLoader] = useState(false);
   const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [bulkDeleteSelectedAssetIds, setBulkDeleteSelectedAssetIds] = useState<string[]>([]);
+  const [pendingCheckpointRestore, setPendingCheckpointRestore] = useState<FullBackupPayload | null>(null);
+  const [manualCheckpointToast, setManualCheckpointToast] = useState<string | null>(null);
+  const manualRestoreFileInputRef = useRef<HTMLInputElement>(null);
 
   // Synchronize with localStorage
   useEffect(() => {
@@ -654,6 +662,48 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  // Manual Checkpoint (.JSON) Handlers
+  const handleDownloadManualCheckpoint = () => {
+    try {
+      const filename = exportManualCheckpointJSON({
+        storekeepers,
+        technicians,
+        assets,
+        dispatches,
+        kardex,
+        emailSettings,
+      });
+      setManualCheckpointToast(`✅ Checkpoint descargado en su dispositivo (${filename})`);
+      setTimeout(() => setManualCheckpointToast(null), 6000);
+    } catch (err) {
+      alert('Error al generar el archivo físico de checkpoint.');
+    }
+  };
+
+  const handleSelectRestoreCheckpointFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const backup = await parseFullBackupJSON(file);
+      setPendingCheckpointRestore(backup);
+    } catch (err: any) {
+      alert(`Error al procesar checkpoint: ${err.message || 'Estructura inválida'}`);
+    } finally {
+      if (manualRestoreFileInputRef.current) {
+        manualRestoreFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleConfirmRestoreCheckpoint = () => {
+    if (!pendingCheckpointRestore) return;
+
+    handleRestoreFullBackup(pendingCheckpointRestore);
+    setPendingCheckpointRestore(null);
+    alert('✅ Sistema restaurado correctamente desde el Checkpoint');
+  };
+
   // Technician actions
   const handleAddTechnician = (tech: Technician) => {
     setTechnicians((prev) => [tech, ...prev]);
@@ -722,6 +772,7 @@ export default function App() {
         observaciones: 'Ingreso manual a inventario de pañol',
       };
       setKardex((k) => [kdx, ...k]);
+      dispatchKardexEntriesToAppsScript([kdx], activeStorekeeper.nombreCompleto);
 
       return [asset, ...prev];
     });
@@ -1051,6 +1102,7 @@ export default function App() {
         observaciones: `Certificado N° ${calibration.numeroCertificado || 'S/N'} emitido por ${calibration.entidadCertificadora || 'Laboratorio'}. Vence: ${calibration.fechaVencimiento || 'N/A'}.`,
       };
       setKardex((prev) => [kdx, ...prev]);
+      dispatchKardexEntriesToAppsScript([kdx], activeStorekeeper.nombreCompleto);
     }
 
     broadcastRealtimeSync();
@@ -1093,6 +1145,9 @@ export default function App() {
       observaciones: newDispatch.observaciones || 'Despacho para labor en campo',
     }));
     setKardex((prev) => [...newKardexEntries, ...prev]);
+
+    // Disparador en segundo plano para Google Apps Script
+    dispatchKardexEntriesToAppsScript(newKardexEntries, activeStorekeeper.nombreCompleto);
 
     broadcastRealtimeSync();
     setCurrentTab('monitor');
@@ -1168,6 +1223,8 @@ export default function App() {
         observaciones: it.observacionesRetorno || notes || 'Retorno conforme a pañol',
       }));
       setKardex((prev) => [...returnKardex, ...prev]);
+      // Disparador en segundo plano para Google Apps Script
+      dispatchKardexEntriesToAppsScript(returnKardex, receiverName || activeStorekeeper.nombreCompleto);
     }
 
     broadcastRealtimeSync();
@@ -1283,9 +1340,39 @@ export default function App() {
           setBulkDeleteSelectedAssetIds([]);
           setIsBulkDeleteModalOpen(true);
         }}
+        onDownloadManualCheckpoint={handleDownloadManualCheckpoint}
+        onTriggerRestoreCheckpoint={() => manualRestoreFileInputRef.current?.click()}
         syncState={syncState}
         onManualSync={handleManualSync}
       />
+
+      {/* Hidden file input for manual checkpoint restore */}
+      <input
+        ref={manualRestoreFileInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleSelectRestoreCheckpointFile}
+        className="hidden"
+      />
+
+      {/* Notification banner for manual checkpoint download */}
+      {manualCheckpointToast && (
+        <div className="no-print bg-emerald-600 text-white px-4 py-2.5 text-xs font-bold flex items-center justify-between shadow-md animate-in slide-in-from-top duration-300">
+          <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+              <span>{manualCheckpointToast}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setManualCheckpointToast(null)}
+              className="text-white hover:text-emerald-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Critical Overdue Banner (> 24h) */}
       {overdueCount > 0 && currentTab !== 'monitor' && (
@@ -1560,6 +1647,55 @@ export default function App() {
         selectedAssetIds={bulkDeleteSelectedAssetIds}
         onExecuteBulkDelete={handleExecuteBulkDelete}
       />
+
+      {/* Modal de Confirmación de Restauración de Checkpoint */}
+      {pendingCheckpointRestore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 text-slate-900 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Confirmar Restauración de Checkpoint
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Reemplazo total de datos en memoria y almacenamiento
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed bg-amber-50 border border-amber-200 p-3.5 rounded-xl font-medium">
+              ¿Desea restaurar este checkpoint? Se reemplazará el estado actual por el guardado con fecha <strong>{new Date(pendingCheckpointRestore.fechaBackup).toLocaleString('es-PE')}</strong>.
+            </p>
+
+            <div className="text-[11px] text-slate-600 space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+              <div>• Herramientas y dados: <strong>{pendingCheckpointRestore.herramientas?.length || 0}</strong></div>
+              <div>• Personal técnico: <strong>{pendingCheckpointRestore.trabajadores?.length || 0}</strong></div>
+              <div>• Préstamos / Vales: <strong>{pendingCheckpointRestore.prestamos?.length || 0}</strong></div>
+              <div>• Movimientos en Kardex: <strong>{pendingCheckpointRestore.kardex?.length || 0}</strong></div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setPendingCheckpointRestore(null)}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRestoreCheckpoint}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition cursor-pointer"
+              >
+                Confirmar e Instalar Checkpoint
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="no-print mt-auto border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">

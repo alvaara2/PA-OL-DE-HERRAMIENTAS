@@ -35,6 +35,7 @@ import {
   saveStoredResendSender
 } from '../utils/realEmailService';
 import { 
+  exportManualCheckpointJSON,
   exportFullBackupJSON, 
   parseFullBackupJSON, 
   FullBackupPayload 
@@ -227,7 +228,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
   // Backup Download Handler
   const handleDownloadFullBackup = () => {
     try {
-      const filename = exportFullBackupJSON({
+      const filename = exportManualCheckpointJSON({
         storekeepers,
         technicians,
         assets,
@@ -236,14 +237,14 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
         emailSettings: settings,
       });
       setStatusMessage({
-        text: '✅ Respaldo descargado correctamente',
+        text: `✅ Checkpoint descargado en su dispositivo (${filename})`,
         isError: false,
       });
       setTimeout(() => setStatusMessage(null), 5000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setStatusMessage({
-        text: `Error al generar el respaldo: ${msg}`,
+        text: `Error al generar el checkpoint: ${msg}`,
         isError: true,
       });
     }
@@ -537,15 +538,15 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-          {/* Botón A: Descargar Respaldo Completo */}
+          {/* Botón A: Crear Checkpoint Manual (.JSON) */}
           <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center gap-2 font-bold text-slate-800 text-sm mb-1">
                 <Download className="w-4 h-4 text-blue-600" />
-                <span>Exportar Respaldo Completo (.JSON)</span>
+                <span>Crear Checkpoint Manual (.JSON)</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Descarga un archivo con el formato <strong>backup_almacen_YYYY-MM-DD_HHmm.json</strong> con todas las herramientas (fotos y certificados PDF Base64), técnicos, encargados con firmas y kardex.
+                Compila en un solo archivo <strong>checkpoint_almacen_YYYY-MM-DD_HHmm.json</strong> todo el estado actual del almacén: encargados con firmas en Base64, personal, herramientas con códigos y certificados PDF embebidos, préstamos y kardex.
               </p>
             </div>
             <button
@@ -554,16 +555,16 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
               className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-black text-xs shadow-md shadow-blue-600/20 transition cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>💾 Descargar Respaldo Completo (.JSON)</span>
+              <span>💾 Crear Checkpoint Manual (Descargar .JSON)</span>
             </button>
           </div>
 
-          {/* Botón B: Restaurar Datos desde Archivo */}
+          {/* Botón B: Restaurar desde Checkpoint (.JSON) */}
           <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center gap-2 font-bold text-slate-800 text-sm mb-1">
                 <Upload className="w-4 h-4 text-emerald-600" />
-                <span>Restaurar Datos desde Archivo (.JSON)</span>
+                <span>Restaurar desde Checkpoint (.JSON)</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
                 Seleccione un archivo <strong>.json</strong> previo para validar y reemplazar el estado global al instante, refrescando todas las tablas y pantallas.
@@ -576,7 +577,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
                 className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
               >
                 <FolderArchive className="w-4 h-4" />
-                <span>📂 Restaurar Datos desde Archivo (.JSON)</span>
+                <span>📂 Restaurar desde Checkpoint (.JSON)</span>
               </button>
               <input
                 ref={backupFileInputRef}
@@ -623,7 +624,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-black text-slate-900">
-                  Confirmar Restauración de Datos
+                  Confirmar Restauración de Checkpoint
                 </h3>
                 <p className="text-xs text-slate-500">
                   Operación de reemplazo de base de datos
@@ -632,7 +633,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-700 leading-relaxed bg-amber-50 border border-amber-200 p-3.5 rounded-xl font-medium">
-              ¿Desea restaurar esta copia de seguridad? Se reemplazarán los datos actuales por los del respaldo con fecha <strong>{new Date(pendingRestoreBackup.fechaBackup).toLocaleString('es-PE')}</strong>.
+              ¿Desea restaurar este checkpoint? Se reemplazará el estado actual por el guardado con fecha <strong>{new Date(pendingRestoreBackup.fechaBackup).toLocaleString('es-PE')}</strong>.
             </p>
 
             <div className="text-[11px] text-slate-600 space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">

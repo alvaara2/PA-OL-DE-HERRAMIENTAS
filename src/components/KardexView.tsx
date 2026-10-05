@@ -29,6 +29,10 @@ import {
   downloadToolsTemplate, 
   downloadWorkersTemplate 
 } from '../utils/excelTemplates';
+import { 
+  GOOGLE_SHEETS_KARDEX_VIEW_URL, 
+  dispatchKardexEntriesToAppsScript 
+} from '../utils/googleSheetsSync';
 
 interface KardexViewProps {
   entries: KardexEntry[];
@@ -43,6 +47,19 @@ export const KardexView: React.FC<KardexViewProps> = ({ entries, onOpenBulkDelet
   const [endDate, setEndDate] = useState('');
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [formulaCopied, setFormulaCopied] = useState(false);
+  const [isSyncingWebhook, setIsSyncingWebhook] = useState(false);
+  const [syncSuccessToast, setSyncSuccessToast] = useState(false);
+
+  const handleSyncToWebhookNow = async () => {
+    setIsSyncingWebhook(true);
+    try {
+      await dispatchKardexEntriesToAppsScript(filteredEntries.slice(0, 30));
+      setSyncSuccessToast(true);
+      setTimeout(() => setSyncSuccessToast(false), 4000);
+    } finally {
+      setIsSyncingWebhook(false);
+    }
+  };
 
   // Construct dynamic Google Sheets IMPORTDATA formula
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://tu-dominio.vercel.app';
@@ -159,6 +176,30 @@ export const KardexView: React.FC<KardexViewProps> = ({ entries, onOpenBulkDelet
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Botón directo oficial solicitado: Abrir Kardex en Google Sheets */}
+          <a
+            href={GOOGLE_SHEETS_KARDEX_VIEW_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow-xs transition cursor-pointer border border-emerald-800"
+            title="Abrir la hoja de cálculo oficial de Google Sheets vinculada al Pañol"
+          >
+            <ExternalLink className="w-4 h-4 text-emerald-200" />
+            <span>📊 Abrir Kardex en Google Sheets</span>
+          </a>
+
+          {/* Sincronización manual en vivo con Google Apps Script */}
+          <button
+            type="button"
+            onClick={handleSyncToWebhookNow}
+            disabled={isSyncingWebhook}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50"
+            title="Enviar los últimos movimientos directamente al Webhook de Google Apps Script"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingWebhook ? 'animate-spin' : ''}`} />
+            <span>{isSyncingWebhook ? 'Sincronizando...' : '⚡ Sincronizar Apps Script'}</span>
+          </button>
+
           {/* Opción A: Sincronización con Google Sheets */}
           <button
             type="button"
@@ -181,7 +222,7 @@ export const KardexView: React.FC<KardexViewProps> = ({ entries, onOpenBulkDelet
             title="Descargar archivo Excel con formato listo para Google Drive"
           >
             <Download className="w-4 h-4" />
-            <span>📊 Abrir / Descargar Kardex para Sheets (.xlsx)</span>
+            <span>📊 Descargar Excel (.xlsx)</span>
           </button>
 
           <button
@@ -225,6 +266,26 @@ export const KardexView: React.FC<KardexViewProps> = ({ entries, onOpenBulkDelet
           )}
         </div>
       </div>
+
+      {/* Sync Success Toast */}
+      {syncSuccessToast && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>
+              ✅ Movimientos sincronizados exitosamente con Google Apps Script y reflejados en Google Sheets.
+            </span>
+          </div>
+          <a
+            href={GOOGLE_SHEETS_KARDEX_VIEW_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-700 underline font-black text-[11px] inline-flex items-center gap-1"
+          >
+            Ver en Sheets <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

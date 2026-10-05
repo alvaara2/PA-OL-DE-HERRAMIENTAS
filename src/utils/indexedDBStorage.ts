@@ -155,6 +155,59 @@ export interface FullBackupPayload {
 }
 
 /**
+ * Generates and downloads the full manual checkpoint file with the exact filename:
+ * checkpoint_almacen_YYYY-MM-DD_HHmm.json
+ */
+export function exportManualCheckpointJSON(data: {
+  storekeepers: any[];
+  technicians: any[];
+  assets: any[];
+  dispatches: any[];
+  kardex: any[];
+  emailSettings?: any;
+}): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const filename = `checkpoint_almacen_${yyyy}-${mm}-${dd}_${hh}${min}.json`;
+
+  const checkpointObject = {
+    metadatos: {
+      version: '4.5-pro',
+      fechaCreacion: now.toISOString(),
+      sistema: 'PañolPro - Control Integral de Taller y Herramientas',
+    },
+    fechaBackup: now.toISOString(),
+    encargados: data.storekeepers,
+    personal: data.technicians,
+    trabajadores: data.technicians,
+    herramientas: data.assets,
+    assets: data.assets,
+    prestamos: data.dispatches,
+    dispatches: data.dispatches,
+    kardex: data.kardex,
+    configuracion: data.emailSettings || {},
+  };
+
+  const jsonStr = JSON.stringify(checkpointObject, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  return filename;
+}
+
+/**
  * Generates and downloads the full system backup with the exact filename:
  * backup_almacen_YYYY-MM-DD_HHmm.json
  */

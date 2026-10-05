@@ -31,6 +31,7 @@ import {
   deleteCheckpointFromIndexedDB, 
   downloadCheckpointFile, 
   parseCheckpointFile,
+  exportManualCheckpointJSON,
   exportFullBackupJSON,
   parseFullBackupJSON 
 } from '../utils/indexedDBStorage';
@@ -143,7 +144,7 @@ export const CheckpointsModal: React.FC<CheckpointsModalProps> = ({
   // 2. Full Backup Download
   const handleDownloadFullBackup = () => {
     try {
-      exportFullBackupJSON({
+      const filename = exportManualCheckpointJSON({
         storekeepers,
         technicians,
         assets,
@@ -151,11 +152,11 @@ export const CheckpointsModal: React.FC<CheckpointsModalProps> = ({
         kardex,
         emailSettings: {},
       });
-      setToastMessage('✅ Respaldo descargado correctamente');
+      setToastMessage(`✅ Checkpoint descargado en su dispositivo (${filename})`);
       setTimeout(() => setToastMessage(null), 5000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al exportar.';
-      alert(`Error al generar respaldo: ${msg}`);
+      alert(`Error al generar checkpoint: ${msg}`);
     }
   };
 
