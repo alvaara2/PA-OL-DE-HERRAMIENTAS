@@ -119,6 +119,41 @@
   animation: tool-self-spin 2s linear infinite;
 }
 
+/* TV Andon Marquee & Glow Keyframes */
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 32s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes pulse-glow-red {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.35), inset 0 0 12px rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.8);
+  }
+  50% {
+    box-shadow: 0 0 38px rgba(239, 68, 68, 0.85), inset 0 0 24px rgba(239, 68, 68, 0.35);
+    border-color: rgba(254, 202, 202, 1);
+  }
+}
+
+.glow-danger {
+  animation: pulse-glow-red 1.8s ease-in-out infinite;
+}
+
 @media print {
   body {
     background: #ffffff !important;

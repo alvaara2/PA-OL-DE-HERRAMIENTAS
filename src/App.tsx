@@ -15,6 +15,7 @@ import { QuickDispatchModal } from './components/QuickDispatchModal';
 import { LabelSheetModal } from './components/LabelSheetModal';
 import { QrScannerModal } from './components/QrScannerModal';
 import { ToolSpinLoader } from './components/ToolSpinLoader';
+import { TvAndonLiveView } from './components/TvAndonLiveView';
 import { 
   INITIAL_ASSETS, 
   INITIAL_TECHNICIANS, 
@@ -152,8 +153,71 @@ export default function App() {
     return INITIAL_EMAIL_SETTINGS;
   });
 
-  // Active navigation tab
-  const [currentTab, setCurrentTab] = useState<ActiveTab>('dashboard');
+  // Active navigation tab with /tv and /live URL route detection
+  const [currentTab, setCurrentTab] = useState<ActiveTab>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const path = window.location.pathname.toLowerCase();
+        const hash = window.location.hash.toLowerCase();
+        const search = window.location.search.toLowerCase();
+        if (
+          path === '/tv' || 
+          path === '/live' || 
+          path.endsWith('/tv') || 
+          path.endsWith('/live') ||
+          hash === '#tv' || 
+          hash === '#/tv' || 
+          hash === '#live' || 
+          hash === '#/live' ||
+          search.includes('mode=tv') ||
+          search.includes('mode=live')
+        ) {
+          return 'tv';
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'dashboard';
+  });
+
+  const handleTabChange = (tab: ActiveTab) => {
+    setCurrentTab(tab);
+    try {
+      if (typeof window !== 'undefined') {
+        if (tab === 'tv') {
+          window.history.pushState({ tab: 'tv' }, '', '/tv');
+        } else {
+          if (window.location.pathname === '/tv' || window.location.pathname === '/live') {
+            window.history.pushState({ tab }, '', '/');
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  // Listen to browser forward/back buttons for /tv
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        if (typeof window !== 'undefined') {
+          const path = window.location.pathname.toLowerCase();
+          const hash = window.location.hash.toLowerCase();
+          if (path === '/tv' || path === '/live' || hash === '#tv' || hash === '#/tv') {
+            setCurrentTab('tv');
+          } else {
+            setCurrentTab('dashboard');
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Modals & sync states
   const [syncState, setSyncState] = useState<'synced' | 'syncing' | 'offline'>('synced');
@@ -339,16 +403,13 @@ export default function App() {
     broadcastRealtimeSync();
   };
 
-  const handleDeleteStorekeeper = (id: string) => {
-    if (storekeepers.length <= 1) {
-      return;
-    }
+  const handleDeleteEncargado = (id: string) => {
     const target = storekeepers.find((k) => k.id === id);
     if (!target) return;
 
     const updatedStorekeepers = storekeepers.filter((k) => k.id !== id);
 
-    // If deleting currently active storekeeper, switch immediately to the next one
+    // If deleting currently active storekeeper, switch immediately to the next one or empty
     if (id === activeStorekeeperId) {
       const nextActive = updatedStorekeepers[0];
       if (nextActive) {
@@ -357,6 +418,13 @@ export default function App() {
           localStorage.setItem(STORAGE_KEYS.ACTIVE_KEEPER, nextActive.id);
         } catch (e) {
           console.warn('Failed to update active keeper in storage', e);
+        }
+      } else {
+        setActiveStorekeeperId('');
+        try {
+          localStorage.removeItem(STORAGE_KEYS.ACTIVE_KEEPER);
+        } catch (e) {
+          // ignore
         }
       }
     }
@@ -375,7 +443,7 @@ export default function App() {
       codigoOIdentificador: target.dni,
       nombreODescripcion: `${target.nombreCompleto} (${target.cargo})`,
       fechaEliminacion: new Date().toISOString(),
-      eliminadoPor: activeStorekeeper.nombreCompleto,
+      eliminadoPor: activeStorekeeper?.nombreCompleto || 'Administrador',
       data: target,
     };
     setRecycleBin((prev) => [binItem, ...prev]);
@@ -383,6 +451,8 @@ export default function App() {
     setStorekeepers(updatedStorekeepers);
     broadcastRealtimeSync();
   };
+
+  const handleDeleteStorekeeper = handleDeleteEncargado;
 
   // Checkpoints management
   const handleCreateCheckpoint = (nombre: string, descripcion?: string, tipo: 'manual' | 'automatico' = 'manual') => {
@@ -826,12 +896,37 @@ export default function App() {
     .filter((a) => a.calibracion?.requiereCalibracion)
     .filter((a) => evaluateCalibration(a.calibracion).estaBloqueadoPorCalibracion).length;
 
+  // Dedicated Kiosk / Fullscreen Mode TV Andon (/tv or /live)
+  if (currentTab === 'tv') {
+    return (
+      <TvAndonLiveView
+        dispatches={dispatches}
+        assets={assets}
+        activeStorekeeper={activeStorekeeper}
+        technicians={technicians}
+        onExitTvMode={() => handleTabChange('dashboard')}
+        onRefreshData={() => {
+          try {
+            const a = localStorage.getItem(STORAGE_KEYS.ASSETS);
+            if (a) setAssets(JSON.parse(a));
+            const d = localStorage.getItem(STORAGE_KEYS.DISPATCHES);
+            if (d) setDispatches(JSON.parse(d));
+            const t = localStorage.getItem(STORAGE_KEYS.TECHNICIANS);
+            if (t) setTechnicians(JSON.parse(t));
+          } catch (e) {
+            // ignore
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
       {/* Top Sticky Navigation */}
       <HeaderNav
         currentTab={currentTab}
-        onTabChange={setCurrentTab}
+        onTabChange={handleTabChange}
         dispatches={dispatches}
         activeStorekeeper={activeStorekeeper}
         onOpenShiftModal={() => setIsShiftModalOpen(true)}
@@ -893,7 +988,7 @@ export default function App() {
             dispatches={dispatches}
             technicians={technicians}
             activeStorekeeper={activeStorekeeper}
-            onNavigateTab={setCurrentTab}
+            onNavigateTab={handleTabChange}
             onOpenShiftModal={() => setIsShiftModalOpen(true)}
             onOpenQuickDispatch={() => {
               setPreselectedAssetForDispatch(null);
@@ -1023,6 +1118,7 @@ export default function App() {
         onUpdateStorekeeper={handleUpdateStorekeeper}
         onAddStorekeeper={handleAddStorekeeper}
         onDeleteStorekeeper={handleDeleteStorekeeper}
+        handleDeleteEncargado={handleDeleteEncargado}
       />
 
       {/* Global Quick Dispatch Modal with auto-stamped signature */}

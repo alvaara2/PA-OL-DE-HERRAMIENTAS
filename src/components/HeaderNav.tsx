@@ -13,7 +13,8 @@ import {
   Contact,
   Mail,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Tv
 } from 'lucide-react';
 import { LoanDispatch, StorekeeperProfile } from '../types/workshop';
 import { calculateLoanAlert } from '../utils/timeAlerts';
@@ -28,7 +29,8 @@ export type ActiveTab =
   | 'catalog' 
   | 'excel' 
   | 'reports' 
-  | 'email';
+  | 'email'
+  | 'tv';
 
 interface HeaderNavProps {
   currentTab: ActiveTab;
@@ -153,6 +155,16 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               title="Abrir Escáner de Cámara QR"
             >
               <Camera className="w-4 h-4 text-blue-600" />
+            </button>
+
+            <button
+              onClick={() => onTabChange('tv')}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-black text-xs border border-amber-500/50 shadow-sm transition shrink-0 group cursor-pointer"
+              title="Abrir pantalla en vivo para TV / Modo Andon (/tv)"
+            >
+              <Tv className="w-4 h-4 text-amber-400 group-hover:scale-110 transition" />
+              <span className="hidden sm:inline">Modo TV Andon</span>
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
             </button>
 
             <button
@@ -306,6 +318,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             { id: 'excel', label: 'Excel', icon: FileSpreadsheet },
             { id: 'reports', label: 'Reportes', icon: History },
             { id: 'email', label: 'Correo', icon: Mail },
+            { id: 'tv', label: 'Modo TV', icon: Tv },
           ].map((item) => {
             const Icon = item.icon;
             return (

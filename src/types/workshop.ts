@@ -124,6 +124,8 @@ export interface LoanDispatch {
 export interface EmailSettings {
   remitente: string; // Mi Correo Electrónico
   passwordApp: string; // Mi Contraseña
+  resendApiKey?: string; // API Key de Resend (re_...)
+  resendSender?: string; // Remitente de Resend (e.g. Almacen Central <onboarding@resend.dev>)
   destinatario1?: string; // Correo 1 (Supervisor / Jefe de Taller)
   destinatario2?: string; // Correo 2 (Jefe de Almacén)
   destinatario3?: string; // Correo 3 (Seguridad / Calidad)

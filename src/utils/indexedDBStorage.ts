@@ -118,16 +118,15 @@ export async function deleteCheckpointFromIndexedDB(id: string): Promise<void> {
 }
 
 /**
- * Triggers automatic download of checkpoint file: checkpoint_almacen_[fecha].json
+ * Triggers automatic download of checkpoint file: checkpoint_almacen_YYYY-MM-DD.json
  */
 export function downloadCheckpointFile(checkpoint: SystemCheckpoint): void {
   try {
-    const dateFormatted = new Date(checkpoint.timestamp)
-      .toISOString()
-      .replace(/T/, '_')
-      .replace(/:/g, '-')
-      .split('.')[0];
-    const filename = `checkpoint_almacen_${dateFormatted}.json`;
+    const d = new Date(checkpoint.timestamp);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const filename = `checkpoint_almacen_${yyyy}-${mm}-${dd}.json`;
 
     const jsonStr = JSON.stringify(checkpoint, null, 2);
     const blob = new Blob([jsonStr], { type: 'application/json' });

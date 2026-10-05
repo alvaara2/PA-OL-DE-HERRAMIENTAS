@@ -26,19 +26,21 @@ import {
   Check,
   AlertTriangle,
   ArrowRight,
-  Eye
+  Eye,
+  Tv
 } from 'lucide-react';
 import { PhysicalAsset, LoanDispatch, Technician, StorekeeperProfile } from '../types/workshop';
 import { calculateLoanAlert } from '../utils/timeAlerts';
 import { evaluateCalibration } from '../utils/calibrationHelper';
 import { ToolSpinLoader } from './ToolSpinLoader';
+import { ActiveTab } from './HeaderNav';
 
 interface WorkshopDashboardViewProps {
   assets: PhysicalAsset[];
   dispatches: LoanDispatch[];
   technicians: Technician[];
   activeStorekeeper: StorekeeperProfile;
-  onNavigateTab: (tab: 'dashboard' | 'monitor' | 'dispatch' | 'catalog' | 'workers' | 'metrology' | 'excel' | 'reports' | 'email') => void;
+  onNavigateTab: (tab: ActiveTab) => void;
   onOpenShiftModal: () => void;
   onOpenQuickDispatch: () => void;
   onOpenScanner: () => void;
@@ -267,6 +269,17 @@ export const WorkshopDashboardView: React.FC<WorkshopDashboardViewProps> = ({
 
         {/* Action Fast-Buttons & Loader Trigger */}
         <div className="flex flex-wrap items-center gap-2.5 z-10 shrink-0">
+          {/* Modo TV Andon Button */}
+          <button
+            onClick={() => onNavigateTab('tv')}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-300 font-black text-xs transition border border-amber-500/40 shadow-xs group cursor-pointer"
+            title="Abrir Pantalla en Vivo para Smart TV / Modo Andon (/tv)"
+          >
+            <Tv className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition" />
+            <span>Modo TV Andon</span>
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping ml-0.5" />
+          </button>
+
           {/* Animated Spinner Showcase Button */}
           <button
             onClick={() => setShowRotatingToolLoader(true)}

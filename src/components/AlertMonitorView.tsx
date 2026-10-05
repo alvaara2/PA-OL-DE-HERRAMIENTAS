@@ -24,14 +24,7 @@ import {
   TimeAlertInfo 
 } from '../types/workshop';
 import { calculateLoanAlert } from '../utils/timeAlerts';
-import { sendEmailWithTimeout } from '../utils/emailService';
-import { 
-  getStoredOAuthSession, 
-  connectWithGoogle, 
-  connectWithMicrosoft, 
-  sendEmailThroughOAuth, 
-  OAuthSession 
-} from '../utils/oauthService';
+import { sendRealEmail } from '../utils/realEmailService';
 import { ReturnModal } from './ReturnModal';
 import { ReceiptModal } from './ReceiptModal';
 import { QrScannerModal } from './QrScannerModal';
@@ -76,11 +69,6 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
   const [activeReturnDispatch, setActiveReturnDispatch] = useState<LoanDispatch | null>(null);
   const [activeReceiptDispatch, setActiveReceiptDispatch] = useState<LoanDispatch | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-
-  // OAuth Modal state for alerts when not logged in
-  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
-  const [pendingAlertData, setPendingAlertData] = useState<{ dispatch: LoanDispatch; alert: TimeAlertInfo } | null>(null);
-  const [isConnectingOAuth, setIsConnectingOAuth] = useState<'google' | 'microsoft' | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -143,45 +131,36 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
     }
   };
 
-  // Core function to dispatch email alert once OAuth session is verified
-  const dispatchOverdueEmail = async (
-    session: OAuthSession,
-    dispatch: LoanDispatch,
-    alert: TimeAlertInfo
-  ) => {
+  // Real Overdue Email Alert Sender (> 24 hours) via Serverless Backend
+  const handleSendOverdueEmail = async (dispatch: LoanDispatch, alert: TimeAlertInfo) => {
     setIsSendingEmailId(dispatch.id);
     setAlertSuccessMessage(null);
     setAlertErrorMessage(null);
 
     try {
-      // 1. Identify technician personal email from their file
+      // 1. Extrae el correo real del técnico desde la ficha del trabajador
       const matchedTech = technicians.find((t) => t.dni === dispatch.tecnicoDni);
       const personalEmail =
         matchedTech?.correo?.trim() ||
         `${dispatch.tecnicoNombre.toLowerCase().replace(/[^a-z0-9]/g, '.')}@empresa.com`;
 
-      // 2. Fixed 4 recipients configured in email settings
+      // 2. Junta los 4 correos fijos configurados + el correo del trabajador
       const d1 = emailSettings?.destinatario1 || emailSettings?.destinatarios?.[0] || 'supervisor.taller@empresa.com';
       const d2 = emailSettings?.destinatario2 || emailSettings?.destinatarios?.[1] || 'jefe.almacen@empresa.com';
       const d3 = emailSettings?.destinatario3 || emailSettings?.destinatarios?.[2] || 'seguridad.calidad@empresa.com';
       const d4 = emailSettings?.destinatario4 || emailSettings?.destinatarios?.[3] || 'archivo.panol@empresa.com';
 
       const fixedSupervisors = [d1, d2, d3, d4].filter(Boolean);
-
-      // 3. Combined 5 recipients: 4 fixed supervisors + 1 personal email of technician
       const allRecipients = Array.from(new Set([...fixedSupervisors, personalEmail]));
 
-      // 4. Tool/die details
+      // 3. Tool / die details
       const unreturned = dispatch.items.filter((it) => !it.retornado);
       const toolCodes = unreturned.map((it) => it.codigoActivoFisico).join(', ');
-      const toolNames = unreturned.map((it) => `${it.codigoActivoFisico} - ${it.descripcion}`).join(' / ');
 
-      // 5. Subject
       const subject = `🚨 URGENTE: Retención de Herramienta Vencida (> 24h) - [${toolCodes}]`;
 
-      // 6. Formal Body HTML
       const bodyHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ef4444; border-radius: 12px; overflow: hidden;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 2px solid #ef4444; border-radius: 12px; overflow: hidden;">
           <div style="background-color: #dc2626; color: white; padding: 20px; text-align: center;">
             <h2 style="margin: 0; font-size: 19px; letter-spacing: -0.5px;">🚨 NOTIFICACIÓN URGENTE: RETENCIÓN DE HERRAMIENTA (> 24H)</h2>
             <p style="margin: 5px 0 0; font-size: 12px;">Control de Pañol, Trazabilidad Física y Seguridad Industrial</p>
@@ -212,8 +191,8 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
                 <td style="padding: 8px 10px; border: 1px solid #e2e8f0;">${new Date(dispatch.fechaPrestamo).toLocaleString('es-PE')} (Vale: ${dispatch.codigoVale})</td>
               </tr>
               <tr style="background-color: #fef2f2;">
-                <td style="padding: 8px 10px; border: 1px solid #fecaca; font-weight: bold; color: #991b1b;">Horas de Sobretiempo Acumuladas:</td>
-                <td style="padding: 8px 10px; border: 1px solid #fecaca; font-weight: bold; color: #991b1b;">+${alert.horasSobretiempo.toFixed(1)} horas de retraso</td>
+                <td style="padding: 8px 10px; border: 1px solid #fecaca; font-weight: bold; color: #991b1b;">Horas de Retraso Acumuladas:</td>
+                <td style="padding: 8px 10px; border: 1px solid #fecaca; font-weight: bold; color: #991b1b;">+${alert.horasSobretiempo.toFixed(1)} horas de sobretiempo</td>
               </tr>
               <tr style="background-color: #f8fafc;">
                 <td style="padding: 8px 10px; border: 1px solid #e2e8f0; font-weight: bold;">Área / Labor:</td>
@@ -226,7 +205,6 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
             </div>
 
             <p style="font-size: 11px; color: #64748b; margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
-              Notificación oficial despachada a través de ${session.provider === 'google' ? 'Google Workspace' : 'Microsoft 365'} (${session.email}).<br/>
               Destinatarios en copia (${allRecipients.length}): ${allRecipients.join(', ')}.<br/>
               Encargado de Pañol en Turno: <strong>${activeStorekeeper?.nombreCompleto || 'Pañolero'}</strong>.
             </p>
@@ -234,75 +212,23 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
         </div>
       `;
 
-      // 7. Send through OAuth
-      const result = await sendEmailThroughOAuth(session, {
-        recipients: allRecipients,
+      // 4. Llama por fetch('/api/send-email', { method: 'POST', body: ... })
+      await sendRealEmail({
+        to: allRecipients,
         subject,
-        bodyHtml,
+        html: bodyHtml,
+        settings: emailSettings,
       });
 
-      if (result.success) {
-        setAlertSuccessMessage(`Alerta enviada con éxito a ${allRecipients.length} destinatarios`);
-      } else {
-        // Fallback with timeout protection
-        await sendEmailWithTimeout(
-          {
-            remitente: session.email,
-            passwordApp: '',
-            destinatarios: allRecipients,
-          },
-          subject,
-          bodyHtml
-        );
-        setAlertSuccessMessage(`Alerta enviada con éxito a ${allRecipients.length} destinatarios`);
-      }
+      // 5. Confirmar ÚNICAMENTE tras recibir código de estado 200/OK del servidor
+      setAlertSuccessMessage(`✓ Alerta enviada con éxito a los ${allRecipients.length} destinatarios (Servidor 200 OK)`);
       setTimeout(() => setAlertSuccessMessage(null), 6000);
     } catch (err: unknown) {
-      console.warn('Error sending alert email', err);
-      const msg = err instanceof Error ? err.message : 'Error al despachar el correo';
+      const msg = err instanceof Error ? err.message : String(err);
       setAlertErrorMessage(`No se pudo enviar el correo de alerta: ${msg}`);
-      setTimeout(() => setAlertErrorMessage(null), 5000);
+      setTimeout(() => setAlertErrorMessage(null), 7000);
     } finally {
       setIsSendingEmailId(null);
-    }
-  };
-
-  // Step 1: Check if OAuth email account is connected before sending
-  const handleSendOverdueEmail = async (dispatch: LoanDispatch, alert: TimeAlertInfo) => {
-    const session = getStoredOAuthSession();
-    if (!session) {
-      // Open modal requesting Google / Microsoft sign-in
-      setPendingAlertData({ dispatch, alert });
-      setIsOAuthModalOpen(true);
-      return;
-    }
-
-    // Account connected: proceed to send
-    await dispatchOverdueEmail(session, dispatch, alert);
-  };
-
-  // Handle OAuth connection from modal
-  const handleConnectAndSend = async (provider: 'google' | 'microsoft') => {
-    setIsConnectingOAuth(provider);
-    try {
-      let session: OAuthSession;
-      if (provider === 'google') {
-        session = await connectWithGoogle(emailSettings?.remitente || 'alvaara2@gmail.com');
-      } else {
-        session = await connectWithMicrosoft('almacen.panol@outlook.com');
-      }
-
-      setIsOAuthModalOpen(false);
-
-      if (pendingAlertData) {
-        const { dispatch, alert } = pendingAlertData;
-        setPendingAlertData(null);
-        await dispatchOverdueEmail(session, dispatch, alert);
-      }
-    } catch (e) {
-      alert('Error al conectar con la cuenta de correo. Intente nuevamente.');
-    } finally {
-      setIsConnectingOAuth(null);
     }
   };
 
@@ -649,109 +575,6 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
           d.items.filter((it) => !it.retornado).map((it) => it.codigoActivoFisico)
         )}
       />
-
-      {/* OAuth Connect Modal when user clicks Send Alert without active session */}
-      {isOAuthModalOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-2xl max-w-md w-full space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
-                  <Mail className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="text-base font-bold text-slate-900 leading-snug">
-                    Conectar Cuenta de Correo (OAuth2)
-                  </h4>
-                  <p className="text-xs text-slate-500">
-                    Autenticación oficial de un solo clic sin contraseñas
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOAuthModalOpen(false);
-                  setPendingAlertData(null);
-                }}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 text-xs text-slate-600">
-              <p className="font-semibold text-slate-800">
-                Para enviar la alerta por herramienta retenida (&gt; 24h), conecte su cuenta:
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Se enviará automáticamente a los <strong>4 supervisores fijos</strong> y al <strong>correo personal del técnico</strong> responsable.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {/* Google Button */}
-              <button
-                type="button"
-                onClick={() => handleConnectAndSend('google')}
-                disabled={isConnectingOAuth !== null}
-                className="w-full p-3.5 rounded-2xl border-2 border-slate-200 hover:border-blue-500 bg-white hover:bg-blue-50/50 text-left transition shadow-xs flex items-center gap-3.5 cursor-pointer disabled:opacity-60"
-              >
-                <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.78-2.1-6.73-4.94H1.24v3.15C3.26 21.36 7.33 24 12 24z"/>
-                    <path fill="#FBBC05" d="M5.27 14.26c-.25-.72-.38-1.49-.38-2.26s.13-1.54.38-2.26V6.59H1.24C.45 8.16 0 9.99 0 12s.45 3.84 1.24 5.41l4.03-3.15z"/>
-                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.59l4.03 3.15c.95-2.84 3.61-4.99 6.73-4.99z"/>
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-slate-900">Conectar cuenta de Google (Gmail)</div>
-                  <div className="text-[11px] text-slate-500">
-                    {isConnectingOAuth === 'google' ? 'Conectando y despachando...' : 'Iniciar con Google Workspace'}
-                  </div>
-                </div>
-              </button>
-
-              {/* Microsoft Button */}
-              <button
-                type="button"
-                onClick={() => handleConnectAndSend('microsoft')}
-                disabled={isConnectingOAuth !== null}
-                className="w-full p-3.5 rounded-2xl border-2 border-slate-200 hover:border-amber-500 bg-white hover:bg-amber-50/50 text-left transition shadow-xs flex items-center gap-3.5 cursor-pointer disabled:opacity-60"
-              >
-                <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-2xs">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="#f25022" d="M1 1h10v10H1z"/>
-                    <path fill="#00a4ef" d="M1 13h10v10H1z"/>
-                    <path fill="#7fba00" d="M13 1h10v10H13z"/>
-                    <path fill="#ffb900" d="M13 13h10v10H13z"/>
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <div className="text-xs font-bold text-slate-900">Conectar cuenta de Microsoft (Outlook)</div>
-                  <div className="text-[11px] text-slate-500">
-                    {isConnectingOAuth === 'microsoft' ? 'Conectando y despachando...' : 'Hotmail, Live y Microsoft 365'}
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOAuthModalOpen(false);
-                  setPendingAlertData(null);
-                }}
-                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
