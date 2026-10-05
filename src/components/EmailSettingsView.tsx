@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Mail, 
   Users, 
@@ -9,9 +9,23 @@ import {
   AlertCircle,
   Key,
   Info,
-  Server
+  Server,
+  Download,
+  Upload,
+  Database,
+  FolderArchive,
+  RotateCcw,
+  AlertTriangle,
+  FileJson
 } from 'lucide-react';
-import { EmailSettings, PhysicalAsset, LoanDispatch } from '../types/workshop';
+import { 
+  EmailSettings, 
+  PhysicalAsset, 
+  LoanDispatch, 
+  Technician, 
+  StorekeeperProfile, 
+  KardexEntry 
+} from '../types/workshop';
 import { 
   sendRealEmail, 
   getStoredResendApiKey, 
@@ -19,6 +33,11 @@ import {
   getStoredResendSender,
   saveStoredResendSender
 } from '../utils/realEmailService';
+import { 
+  exportFullBackupJSON, 
+  parseFullBackupJSON, 
+  FullBackupPayload 
+} from '../utils/indexedDBStorage';
 
 interface EmailSettingsViewProps {
   settings: EmailSettings;
@@ -26,18 +45,30 @@ interface EmailSettingsViewProps {
   activeDispatches?: LoanDispatch[];
   calibratedAssets?: PhysicalAsset[];
   storekeeperName?: string;
+  assets?: PhysicalAsset[];
+  technicians?: Technician[];
+  dispatches?: LoanDispatch[];
+  storekeepers?: StorekeeperProfile[];
+  kardex?: KardexEntry[];
+  onRestoreFullBackup?: (backupData: FullBackupPayload) => void;
 }
 
 export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
   settings,
   onSaveSettings,
+  assets = [],
+  technicians = [],
+  dispatches = [],
+  storekeepers = [],
+  kardex = [],
+  onRestoreFullBackup,
 }) => {
   // Resend API Key & Sender configuration
   const [resendApiKey, setResendApiKey] = useState(
     settings.resendApiKey || getStoredResendApiKey() || ''
   );
   const [resendSender, setResendSender] = useState(
-    settings.resendSender || getStoredResendSender() || 'Almacen Central <onboarding@resend.dev>'
+    'onboarding@resend.dev'
   );
 
   // Optional SMTP / Gmail credentials
@@ -59,8 +90,13 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
   );
 
   // Status feedback states
+  const [testEmailRecipient, setTestEmailRecipient] = useState('alvaara2@gmail.com');
   const [statusMessage, setStatusMessage] = useState<{ text: string; isError: boolean } | null>(null);
   const [isSendingTest, setIsSendingTest] = useState(false);
+
+  // Backup & Restore states
+  const [pendingRestoreBackup, setPendingRestoreBackup] = useState<FullBackupPayload | null>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!resendApiKey) {
@@ -75,7 +111,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
 
     // Persist API key in localStorage
     saveStoredResendApiKey(resendApiKey.trim());
-    saveStoredResendSender(resendSender.trim());
+    saveStoredResendSender('onboarding@resend.dev');
 
     const fixedList = [destinatario1, destinatario2, destinatario3, destinatario4]
       .map((d) => d.trim())
@@ -84,7 +120,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
     const updated: EmailSettings = {
       ...settings,
       resendApiKey: resendApiKey.trim(),
-      resendSender: resendSender.trim(),
+      resendSender: 'onboarding@resend.dev',
       remitente: remitenteGmail.trim(),
       passwordApp: passwordApp.trim(),
       destinatario1: destinatario1.trim(),
@@ -103,61 +139,74 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
     setTimeout(() => setStatusMessage(null), 5000);
   };
 
-  // Real test email dispatch via POST /api/send-email
+  // Real test email dispatch directly to https://api.resend.com/emails (no local proxy routes)
   const handleSendTestEmail = async () => {
     setIsSendingTest(true);
     setStatusMessage(null);
 
-    const fixedList = [destinatario1, destinatario2, destinatario3, destinatario4]
-      .map((d) => d.trim())
-      .filter((d) => d.length > 0 && d.includes('@'));
+    const toEmail = testEmailRecipient.trim() || 'alvaara2@gmail.com';
+    const apiKey = resendApiKey.trim() || getStoredResendApiKey();
 
-    const activeRecipients = fixedList.length > 0 ? fixedList : ['supervisor.taller@empresa.com'];
+    if (!apiKey) {
+      setStatusMessage({
+        text: 'Falta la API Key de Resend. Ingrésela en la casilla (ej. re_xxxxxxxx) y guarde.',
+        isError: true,
+      });
+      setIsSendingTest(false);
+      return;
+    }
 
     try {
-      const currentConfig: EmailSettings = {
-        ...settings,
-        resendApiKey: resendApiKey.trim(),
-        resendSender: resendSender.trim(),
-        remitente: remitenteGmail.trim(),
-        passwordApp: passwordApp.trim(),
-      };
-
-      // Real fetch call to /api/send-email
-      const result = await sendRealEmail({
-        to: activeRecipients,
-        subject: `[PRUEBA REAL] Verificación de Envío de Almacén - ${new Date().toLocaleTimeString('es-PE')}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; padding: 24px; border: 2px solid #2563eb; border-radius: 12px; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1e3a8a; margin-top: 0;">✓ Prueba de Envío Real de Almacén</h2>
-            <p style="font-size: 14px; color: #334155;">
-              Este es un correo 100% real despachado por el backend de la aplicación para validar la conexión con los servidores de correo.
-            </p>
-            <div style="background-color: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin: 16px 0; font-size: 13px;">
-              <strong>Detalles de configuración activa:</strong><br/>
-              • Proveedor: ${resendApiKey.trim() ? 'Resend API (Serverless)' : 'Nodemailer SMTP/Gmail'}<br/>
-              • Remitente: ${resendSender.trim() || remitenteGmail.trim()}<br/>
-              • Fecha y hora: ${new Date().toLocaleString('es-PE')}<br/>
-            </div>
-            <p style="font-size: 13px; font-weight: bold; margin-bottom: 4px;">4 Destinatarios fijos configurados:</p>
-            <ul style="font-size: 13px; color: #475569; margin-top: 0;">
-              <li>Supervisor / Taller: ${destinatario1}</li>
-              <li>Jefe de Almacén: ${destinatario2}</li>
-              <li>Seguridad / Calidad: ${destinatario3}</li>
-              <li>Archivo de Pañol: ${destinatario4}</li>
-            </ul>
+      const subject = `[PRUEBA ALMACÉN] Verificación Directa Resend - ${new Date().toLocaleTimeString('es-PE')}`;
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 24px; border: 2px solid #2563eb; border-radius: 12px; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #1e3a8a; margin-top: 0;">✓ Prueba de Envío Real (Resend API Directa)</h2>
+          <p style="font-size: 14px; color: #334155;">
+            Este es un correo 100% real despachado directamente hacia la API oficial de Resend (https://api.resend.com/emails) usando el remitente oficial <strong>onboarding@resend.dev</strong> sin intermediarios locales.
+          </p>
+          <div style="background-color: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin: 16px 0; font-size: 13px;">
+            <strong>Detalles del envío:</strong><br/>
+            • Destinatario: <strong>${toEmail}</strong><br/>
+            • Remitente: <strong>onboarding@resend.dev</strong><br/>
+            • Fecha y hora: <strong>${new Date().toLocaleString('es-PE')}</strong><br/>
           </div>
-        `,
-        settings: currentConfig,
+          <p style="font-size: 13px; font-weight: bold; margin-bottom: 4px;">4 Destinatarios fijos configurados en pañol:</p>
+          <ul style="font-size: 13px; color: #475569; margin-top: 0;">
+            <li>Supervisor / Taller: ${destinatario1}</li>
+            <li>Jefe de Almacén: ${destinatario2}</li>
+            <li>Seguridad / Calidad: ${destinatario3}</li>
+            <li>Archivo de Pañol: ${destinatario4}</li>
+          </ul>
+        </div>
+      `;
+
+      // Petición DIRECTA a la API oficial de Resend
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey.trim()}`
+        },
+        body: JSON.stringify({
+          from: 'Almacen Central <onboarding@resend.dev>',
+          to: [toEmail], // Debe ser alvaara2@gmail.com en pruebas
+          subject: subject,
+          html: htmlContent
+        })
       });
 
-      // Only show success if server returned 200 OK
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || `Error ${res.status}: ${res.statusText}`);
+      }
+
+      // Mostrar éxito: "Correo enviado con éxito. ID: " + data.id
       setStatusMessage({
-        text: `✓ ${result.message}`,
+        text: "Correo enviado con éxito. ID: " + data.id,
         isError: false,
       });
     } catch (err: unknown) {
-      // Show EXACT real server error returned
+      // Mostrar el ERROR REAL devuelto por el servidor
       const msg = err instanceof Error ? err.message : String(err);
       setStatusMessage({
         text: msg,
@@ -165,6 +214,70 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
       });
     } finally {
       setIsSendingTest(false);
+    }
+  };
+
+  // Aliases for accessibility
+  const testEmail = handleSendTestEmail;
+  const handleSendEmail = handleSendTestEmail;
+
+  // Backup Download Handler
+  const handleDownloadFullBackup = () => {
+    try {
+      const filename = exportFullBackupJSON({
+        storekeepers,
+        technicians,
+        assets,
+        dispatches,
+        kardex,
+        emailSettings: settings,
+      });
+      setStatusMessage({
+        text: '✅ Respaldo descargado correctamente',
+        isError: false,
+      });
+      setTimeout(() => setStatusMessage(null), 5000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatusMessage({
+        text: `Error al generar el respaldo: ${msg}`,
+        isError: true,
+      });
+    }
+  };
+
+  // Restore File Selection Handler
+  const handleSelectRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const backupPayload = await parseFullBackupJSON(file);
+      setPendingRestoreBackup(backupPayload);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Archivo no válido.';
+      alert(`Error al leer archivo de respaldo: ${msg}`);
+    } finally {
+      if (backupFileInputRef.current) {
+        backupFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Confirm Full Restore
+  const handleConfirmRestore = () => {
+    if (!pendingRestoreBackup) return;
+
+    if (onRestoreFullBackup) {
+      onRestoreFullBackup(pendingRestoreBackup);
+      setStatusMessage({
+        text: '✅ Sistema restaurado con éxito desde el archivo JSON',
+        isError: false,
+      });
+      setPendingRestoreBackup(null);
+      setTimeout(() => setStatusMessage(null), 6000);
+    } else {
+      alert('Función de restauración global no disponible.');
     }
   };
 
@@ -190,7 +303,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
           className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs shadow-md shadow-blue-600/20 transition disabled:opacity-60 shrink-0 cursor-pointer"
         >
           <Send className="w-4 h-4" />
-          <span>{isSendingTest ? 'Contactando Servidor de Correo...' : 'Enviar Correo de Prueba Ahora'}</span>
+          <span>{isSendingTest ? 'Enviando...' : 'Enviar Correo de Prueba Ahora'}</span>
         </button>
       </div>
 
@@ -402,6 +515,126 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
           </div>
         </div>
       </form>
+
+      {/* Section 3: Sistema de Respaldo y Base de Datos JSON (Backup & Restore) */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-sm space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
+              <Database className="w-4 h-4 text-emerald-600" />
+              <span>Ajustes / Base de Datos y Copias de Seguridad (.JSON)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Garantice que la información nunca se pierda: descargue o restaure en 1 clic el estado completo del pañol.
+            </p>
+          </div>
+          <span className="text-[11px] bg-emerald-50 text-emerald-800 font-bold px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> BASE DE DATOS SEGURA
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          {/* Botón A: Descargar Respaldo Completo */}
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-slate-800 text-sm mb-1">
+                <Download className="w-4 h-4 text-blue-600" />
+                <span>Exportar Respaldo Completo (.JSON)</span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Descarga un archivo con el formato <strong>backup_almacen_YYYY-MM-DD_HHmm.json</strong> con todas las herramientas (fotos y certificados PDF Base64), técnicos, encargados con firmas y kardex.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadFullBackup}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-98 text-white font-black text-xs shadow-md shadow-blue-600/20 transition cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>💾 Descargar Respaldo Completo (.JSON)</span>
+            </button>
+          </div>
+
+          {/* Botón B: Restaurar Datos desde Archivo */}
+          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center gap-2 font-bold text-slate-800 text-sm mb-1">
+                <Upload className="w-4 h-4 text-emerald-600" />
+                <span>Restaurar Datos desde Archivo (.JSON)</span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Seleccione un archivo <strong>.json</strong> previo para validar y reemplazar el estado global al instante, refrescando todas las tablas y pantallas.
+              </p>
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => backupFileInputRef.current?.click()}
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
+              >
+                <FolderArchive className="w-4 h-4" />
+                <span>📂 Restaurar Datos desde Archivo (.JSON)</span>
+              </button>
+              <input
+                ref={backupFileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleSelectRestoreFile}
+                className="hidden"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal for Full Restore */}
+      {pendingRestoreBackup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 text-slate-900 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Confirmar Restauración de Datos
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Operación de reemplazo de base de datos
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed bg-amber-50 border border-amber-200 p-3.5 rounded-xl font-medium">
+              ¿Desea restaurar esta copia de seguridad? Se reemplazarán los datos actuales por los del respaldo con fecha <strong>{new Date(pendingRestoreBackup.fechaBackup).toLocaleString('es-PE')}</strong>.
+            </p>
+
+            <div className="text-[11px] text-slate-600 space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+              <div>• Herramientas a restaurar: <strong>{pendingRestoreBackup.herramientas?.length || 0}</strong></div>
+              <div>• Trabajadores técnicos: <strong>{pendingRestoreBackup.trabajadores?.length || 0}</strong></div>
+              <div>• Préstamos / Vales: <strong>{pendingRestoreBackup.prestamos?.length || 0}</strong></div>
+              <div>• Encargados con firma: <strong>{pendingRestoreBackup.encargados?.length || 0}</strong></div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setPendingRestoreBackup(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRestore}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
+              >
+                Confirmar y Restaurar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

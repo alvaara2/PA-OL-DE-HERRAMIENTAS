@@ -144,6 +144,109 @@ export function downloadCheckpointFile(checkpoint: SystemCheckpoint): void {
   }
 }
 
+export interface FullBackupPayload {
+  fechaBackup: string;
+  encargados: any[];
+  trabajadores: any[];
+  herramientas: any[];
+  prestamos: any[];
+  kardex: any[];
+  configuracion: any;
+}
+
+/**
+ * Generates and downloads the full system backup with the exact filename:
+ * backup_almacen_YYYY-MM-DD_HHmm.json
+ */
+export function exportFullBackupJSON(data: {
+  storekeepers: any[];
+  technicians: any[];
+  assets: any[];
+  dispatches: any[];
+  kardex: any[];
+  emailSettings: any;
+}): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  const filename = `backup_almacen_${yyyy}-${mm}-${dd}_${hh}${min}.json`;
+
+  const backupObject: FullBackupPayload = {
+    fechaBackup: now.toISOString(),
+    encargados: data.storekeepers,
+    trabajadores: data.technicians,
+    herramientas: data.assets,
+    prestamos: data.dispatches,
+    kardex: data.kardex,
+    configuracion: data.emailSettings,
+  };
+
+  const jsonStr = JSON.stringify(backupObject, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  return filename;
+}
+
+/**
+ * Parses and validates a full system backup JSON file
+ */
+export function parseFullBackupJSON(file: File): Promise<FullBackupPayload> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('El archivo no tiene un formato JSON válido.');
+        }
+
+        // Support both direct Spanish keys and nested data/English keys
+        const herramientas = parsed.herramientas || parsed.data?.assets || parsed.assets;
+        const trabajadores = parsed.trabajadores || parsed.data?.technicians || parsed.technicians;
+        const prestamos = parsed.prestamos || parsed.data?.dispatches || parsed.dispatches;
+
+        if (!Array.isArray(herramientas) || !Array.isArray(trabajadores) || !Array.isArray(prestamos)) {
+          throw new Error('Estructura de respaldo incompleta: debe contener herramientas, trabajadores y prestamos.');
+        }
+
+        const encargados = parsed.encargados || parsed.data?.storekeepers || parsed.storekeepers || [];
+        const kardex = parsed.kardex || parsed.data?.kardex || [];
+        const configuracion = parsed.configuracion || parsed.data?.emailSettings || parsed.emailSettings || {};
+        const fechaBackup = parsed.fechaBackup || parsed.timestamp || new Date().toISOString();
+
+        resolve({
+          fechaBackup,
+          encargados,
+          trabajadores,
+          herramientas,
+          prestamos,
+          kardex,
+          configuracion,
+        });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('Error al procesar el archivo JSON de respaldo.'));
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Error de lectura del archivo en el navegador.'));
+    reader.readAsText(file);
+  });
+}
+
 /**
  * Parses and validates an uploaded checkpoint JSON file
  */

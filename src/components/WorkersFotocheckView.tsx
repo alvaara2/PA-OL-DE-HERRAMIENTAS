@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   Plus, 
@@ -14,17 +14,27 @@ import {
   X,
   Camera,
   Check,
-  Download
+  Download,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { Technician } from '../types/workshop';
 import { getCachedQrDataUrl } from '../utils/qrHelper';
 import * as XLSX from 'xlsx';
+import { downloadWorkersTemplate } from '../utils/excelTemplates';
+
+interface PreviewTechnicianItem extends Technician {
+  esActualizacion: boolean;
+}
 
 interface WorkersFotocheckViewProps {
   technicians: Technician[];
   onAddTechnician: (tech: Technician) => void;
   onUpdateTechnician: (tech: Technician) => void;
   onDeleteTechnician: (id: string) => void;
+  onBatchImportTechnicians?: (techs: Technician[]) => void;
 }
 
 export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
@@ -32,9 +42,16 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
   onAddTechnician,
   onUpdateTechnician,
   onDeleteTechnician,
+  onBatchImportTechnicians,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cargoFilter, setCargoFilter] = useState('all');
+
+  // Excel bulk upload state
+  const excelFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportPreviewOpen, setIsImportPreviewOpen] = useState(false);
+  const [previewTechs, setPreviewTechs] = useState<PreviewTechnicianItem[]>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form modal
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -167,6 +184,118 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
     return true;
   });
 
+  // Handle Excel upload for technicians
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+
+        if (rawData.length < 2) {
+          alert('El archivo Excel no contiene filas de datos.');
+          return;
+        }
+
+        const rawHeaders = (rawData[0] || []) as unknown[];
+        const headers = rawHeaders.map((h) => (h || '').toString().toLowerCase().trim());
+
+        const dniCol = headers.findIndex((h) => /dni|documento|cedula|identifica/.test(h));
+        const nombreCol = headers.findIndex((h) => /nombre|trabajador|personal|apellidos/.test(h));
+        const cargoCol = headers.findIndex((h) => /cargo|puesto|ocupaci|especialidad/.test(h));
+        const areaCol = headers.findIndex((h) => /area|área|bahia|bahía|departamento|seccion/.test(h));
+        const correoCol = headers.findIndex((h) => /correo|email|mail/.test(h));
+        const celularCol = headers.findIndex((h) => /celular|telefono|teléfono|movil|móvil/.test(h));
+
+        const dataRows = rawData.slice(1);
+        const parsedList: PreviewTechnicianItem[] = [];
+
+        dataRows.forEach((row, idx) => {
+          const rowArr = (row || []) as unknown[];
+          const rawDni = String(rowArr[dniCol !== -1 ? dniCol : 0] || '').trim();
+          if (!rawDni) return; // ignore empty rows
+
+          // Clean DNI
+          const cleanDni = rawDni.replace(/[^0-9A-Za-z]/g, '');
+          if (!cleanDni) return;
+
+          let nombre = '';
+          if (nombreCol !== -1) {
+            nombre = String(rowArr[nombreCol] || '').trim();
+          }
+          if (!nombre) {
+            const nombresPart = String(rowArr[0] || '').trim();
+            const apellidosPart = String(rowArr[1] || '').trim();
+            nombre = `${nombresPart} ${apellidosPart}`.trim();
+          }
+          if (!nombre) nombre = `Técnico DNI ${cleanDni}`;
+
+          const cargoVal = (cargoCol !== -1 && String(rowArr[cargoCol] || '').trim()) || 'Mecánico de Taller';
+          const areaVal = (areaCol !== -1 && String(rowArr[areaCol] || '').trim()) || 'Mantenimiento General';
+          const correoVal = (correoCol !== -1 && String(rowArr[correoCol] || '').trim()) || undefined;
+          const celularVal = (celularCol !== -1 && String(rowArr[celularCol] || '').trim()) || undefined;
+
+          const existingTech = technicians.find((t) => t.dni.trim() === cleanDni);
+
+          parsedList.push({
+            id: existingTech ? existingTech.id : `tech-${Date.now()}-${idx}`,
+            dni: cleanDni,
+            nombreCompleto: nombre,
+            cargo: cargoVal,
+            area: areaVal,
+            correo: correoVal,
+            celular: celularVal,
+            activo: true,
+            fechaRegistro: existingTech?.fechaRegistro || new Date().toISOString().split('T')[0],
+            esActualizacion: Boolean(existingTech),
+          });
+        });
+
+        if (parsedList.length === 0) {
+          alert('No se pudieron extraer trabajadores válidos. Verifique que la columna DNI contenga datos.');
+          return;
+        }
+
+        setPreviewTechs(parsedList);
+        setIsImportPreviewOpen(true);
+      } catch (err) {
+        alert('Error al procesar el archivo Excel. Asegúrese de que sea un archivo .xlsx, .xls o .csv válido.');
+      } finally {
+        if (excelFileInputRef.current) {
+          excelFileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmImportTechnicians = () => {
+    if (previewTechs.length === 0) return;
+
+    if (onBatchImportTechnicians) {
+      onBatchImportTechnicians(previewTechs);
+    } else {
+      previewTechs.forEach((item) => {
+        if (item.esActualizacion) {
+          onUpdateTechnician(item);
+        } else {
+          onAddTechnician(item);
+        }
+      });
+    }
+
+    setToastMessage(`✅ ${previewTechs.length} trabajadores importados/actualizados correctamente.`);
+    setIsImportPreviewOpen(false);
+    setPreviewTechs([]);
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
   const handleExportExcel = () => {
     const data = filteredTechnicians.map((t, idx) => ({
       '#': idx + 1,
@@ -202,6 +331,33 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Cargar Personal desde Excel */}
+          <button
+            type="button"
+            onClick={() => excelFileInputRef.current?.click()}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs border border-blue-200 transition cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-blue-600" />
+            <span>📥 Cargar Personal desde Excel</span>
+          </button>
+          <input
+            ref={excelFileInputRef}
+            type="file"
+            accept=".xlsx, .xls, .csv"
+            onChange={handleExcelUpload}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={downloadWorkersTemplate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 transition cursor-pointer"
+            title="Descargar Plantilla Excel de Ejemplo con columnas requeridas"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Descargar Plantilla Excel de Ejemplo</span>
+          </button>
+
           <button
             onClick={() => setPrintAllBadges(true)}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 transition"
@@ -227,6 +383,14 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2.5 shadow-sm animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -670,6 +834,102 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Vista Previa de Importación de Personal */}
+      {isImportPreviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-900">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-blue-600" />
+                  <span>Vista Previa de Importación de Personal Técnico</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Se detectaron <strong>{previewTechs.length}</strong> trabajadores listos para ingresar ({previewTechs.filter((t) => !t.esActualizacion).length} nuevos, {previewTechs.filter((t) => t.esActualizacion).length} para actualizar por DNI).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportPreviewOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 p-6 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                    <th className="pb-2">Acción</th>
+                    <th className="pb-2">DNI</th>
+                    <th className="pb-2">Nombres y Apellidos</th>
+                    <th className="pb-2">Cargo</th>
+                    <th className="pb-2">Área</th>
+                    <th className="pb-2">Correo</th>
+                    <th className="pb-2">Celular</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {previewTechs.map((pt, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-2.5">
+                        {pt.esActualizacion ? (
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                            Actualizar
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            Nuevo
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 font-mono font-bold text-slate-900">{pt.dni}</td>
+                      <td className="py-2.5 text-slate-900 font-semibold">{pt.nombreCompleto}</td>
+                      <td className="py-2.5 text-slate-600">{pt.cargo}</td>
+                      <td className="py-2.5 text-slate-600">{pt.area}</td>
+                      <td className="py-2.5 text-slate-500">{pt.correo || '-'}</td>
+                      <td className="py-2.5 text-slate-500">{pt.celular || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => downloadWorkersTemplate()}
+                className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Descargar Plantilla Excel de Ejemplo
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsImportPreviewOpen(false)}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 font-bold text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmImportTechnicians}
+                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs shadow-md transition cursor-pointer"
+                >
+                  Confirmar e Importar al Sistema ({previewTechs.length})
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -30,7 +30,9 @@ import {
   getAllCheckpointsFromIndexedDB, 
   deleteCheckpointFromIndexedDB, 
   downloadCheckpointFile, 
-  parseCheckpointFile 
+  parseCheckpointFile,
+  exportFullBackupJSON,
+  parseFullBackupJSON 
 } from '../utils/indexedDBStorage';
 
 interface CheckpointsModalProps {
@@ -138,17 +140,58 @@ export const CheckpointsModal: React.FC<CheckpointsModalProps> = ({
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  // 2. Handle File Upload (.json)
+  // 2. Full Backup Download
+  const handleDownloadFullBackup = () => {
+    try {
+      exportFullBackupJSON({
+        storekeepers,
+        technicians,
+        assets,
+        dispatches,
+        kardex,
+        emailSettings: {},
+      });
+      setToastMessage('✅ Respaldo descargado correctamente');
+      setTimeout(() => setToastMessage(null), 5000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al exportar.';
+      alert(`Error al generar respaldo: ${msg}`);
+    }
+  };
+
+  // 3. Handle File Upload (.json) with validation & confirmation
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      const parsedChk = await parseCheckpointFile(file);
-      await saveCheckpointToIndexedDB(parsedChk);
-      onRestoreCheckpoint(parsedChk);
-      setToastMessage(`✓ Checkpoint restaurado al 100% desde archivo: ${file.name}`);
-      setTimeout(() => setToastMessage(null), 5000);
+      // First try full backup structure
+      try {
+        const fullBackup = await parseFullBackupJSON(file);
+        const chk: SystemCheckpoint = {
+          id: `chk-restored-${Date.now()}`,
+          nombre: `Respaldo del ${new Date(fullBackup.fechaBackup).toLocaleDateString('es-PE')}`,
+          descripcion: `Restaurado de archivo ${file.name}`,
+          timestamp: fullBackup.fechaBackup,
+          tipo: 'manual',
+          totalActivos: fullBackup.herramientas.length,
+          totalVales: fullBackup.prestamos.length,
+          totalTecnicos: fullBackup.trabajadores.length,
+          data: {
+            assets: fullBackup.herramientas,
+            technicians: fullBackup.trabajadores,
+            dispatches: fullBackup.prestamos,
+            storekeepers: fullBackup.encargados,
+            kardex: fullBackup.kardex,
+          },
+        };
+        setCheckpointToRestore(chk);
+        return;
+      } catch {
+        // Fallback to standard checkpoint
+        const parsedChk = await parseCheckpointFile(file);
+        setCheckpointToRestore(parsedChk);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al procesar archivo JSON.';
       alert(`Error: ${msg}`);
@@ -160,10 +203,11 @@ export const CheckpointsModal: React.FC<CheckpointsModalProps> = ({
   };
 
   // Execute restore after confirmation
-  const handleConfirmRestore = () => {
+  const handleConfirmRestore = async () => {
     if (!checkpointToRestore) return;
+    await saveCheckpointToIndexedDB(checkpointToRestore);
     onRestoreCheckpoint(checkpointToRestore);
-    setToastMessage(`✓ Sistema restaurado exitosamente al punto: "${checkpointToRestore.nombre}"`);
+    setToastMessage(`✅ Sistema restaurado con éxito desde el archivo JSON`);
     setCheckpointToRestore(null);
     setTimeout(() => setToastMessage(null), 5000);
   };
@@ -244,8 +288,18 @@ export const CheckpointsModal: React.FC<CheckpointsModalProps> = ({
             </button>
           </div>
 
-          {/* Quick Upload Button */}
-          <div className="flex items-center gap-2 pb-2">
+          {/* Quick Backup & Restore Buttons */}
+          <div className="flex flex-wrap items-center gap-2 pb-2">
+            <button
+              type="button"
+              onClick={handleDownloadFullBackup}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-xs transition cursor-pointer"
+              title="Descargar copia completa de seguridad del almacén"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>💾 Descargar Respaldo Completo (.JSON)</span>
+            </button>
+
             <input
               type="file"
               ref={fileInputRef}
@@ -256,11 +310,11 @@ export const CheckpointsModal: React.FC<CheckpointsModalProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl border border-slate-300 transition"
-              title="Restaurar base de datos subiendo archivo JSON"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-xs transition cursor-pointer"
+              title="Restaurar base de datos desde un archivo JSON"
             >
-              <Upload className="w-3.5 h-3.5 text-blue-600" />
-              <span>Subir archivo de checkpoint (.json)</span>
+              <FolderArchive className="w-3.5 h-3.5" />
+              <span>📂 Restaurar Datos desde Archivo (.JSON)</span>
             </button>
           </div>
         </div>

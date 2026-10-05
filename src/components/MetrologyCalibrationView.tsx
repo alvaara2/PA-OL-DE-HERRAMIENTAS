@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { PhysicalAsset, CalibrationData } from '../types/workshop';
 import { evaluateCalibration } from '../utils/calibrationHelper';
+import { CertificatePdfModal } from './CertificatePdfModal';
 import * as XLSX from 'xlsx';
 
 interface MetrologyCalibrationViewProps {
@@ -367,17 +368,17 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           onClick={() => setViewingCertificateAsset(asset)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] border border-slate-200 transition"
-                          title="Ver Certificado Oficial"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-xs border border-blue-200 transition cursor-pointer shadow-2xs"
+                          title="Ver Certificado Oficial en PDF"
                         >
-                          <FileText className="w-3.5 h-3.5 text-blue-600" />
-                          Certificado
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>📄 Ver Certificado Oficial</span>
                         </button>
 
                         <button
                           onClick={() => handleOpenRecalibration(asset)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition shadow-xs"
-                          title="Registrar nueva calibración"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow-xs cursor-pointer"
+                          title="Registrar nueva calibración y subir PDF"
                         >
                           Recalibrar
                         </button>
@@ -504,13 +505,22 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
               </div>
 
               {/* Upload Certificate File */}
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                <label className="text-slate-700 font-bold block mb-1">Adjuntar Archivo de Certificado (PDF o Imagen):</label>
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-700 font-bold block text-xs">
+                    Certificado Oficial en PDF (Laboratorio / Proveedor):
+                  </label>
+                  {pdfDataUrl && (
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      ✓ PDF Adjunto
+                    </span>
+                  )}
+                </div>
                 <input
                   type="file"
-                  accept="application/pdf,image/*"
+                  accept="application/pdf"
                   onChange={handleFileUploadPdf}
-                  className="text-xs text-slate-500"
+                  className="text-xs text-slate-500 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
                 />
               </div>
 
@@ -534,105 +544,24 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
         </div>
       )}
 
-      {/* Official Certificate Viewer Modal */}
-      {viewingCertificateAsset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-3xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 text-slate-900 flex flex-col max-h-[92vh]">
-            <div className="no-print flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Award className="w-5 h-5 text-amber-600" />
-                  <span>Certificado Metrológico Oficial</span>
-                  <span className="font-mono text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
-                    {viewingCertificateAsset.calibracion?.numeroCertificado}
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-500 font-mono">
-                  {viewingCertificateAsset.codigoActivoFisico} • {viewingCertificateAsset.descripcion}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 flex items-center gap-1.5"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Imprimir Certificado
-                </button>
-                <button
-                  onClick={() => setViewingCertificateAsset(null)}
-                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-800"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Certificate Document Content */}
-            <div className="overflow-y-auto p-8 bg-slate-50 rounded-2xl border border-slate-200 font-serif text-slate-800">
-              <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
-                <h2 className="text-lg font-black tracking-wider uppercase text-slate-900">
-                  CERTIFICADO OFICIAL DE CALIBRACIÓN METROLÓGICA
-                </h2>
-                <p className="text-xs text-slate-600 uppercase font-sans font-semibold mt-1">
-                  {viewingCertificateAsset.calibracion?.entidadCertificadora} • LABORATORIO ACREDITADO ISO/IEC 17025
-                </p>
-                <p className="text-xs font-mono font-bold text-amber-800 mt-2 bg-amber-50 inline-block px-3 py-1 rounded border border-amber-200">
-                  CERTIFICADO N°: {viewingCertificateAsset.calibracion?.numeroCertificado}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-xs font-sans mb-6 bg-white p-4 rounded-xl border border-slate-200">
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Datos del Instrumento:</p>
-                  <p className="font-bold text-slate-900 mt-0.5">{viewingCertificateAsset.descripcion}</p>
-                  <p className="text-slate-600">Código Físico: <strong>{viewingCertificateAsset.codigoActivoFisico}</strong></p>
-                  <p className="text-slate-600">Marca / Modelo: {viewingCertificateAsset.marca} {viewingCertificateAsset.modelo || ''}</p>
-                  <p className="text-slate-600">N° de Serie: {viewingCertificateAsset.numeroSerie || 'No visible'}</p>
-                </div>
-
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Parámetros Metrológicos:</p>
-                  <p className="text-slate-600 mt-0.5">Rango Nominal: <strong>{viewingCertificateAsset.calibracion?.rangoMedicion}</strong></p>
-                  <p className="text-slate-600">Tolerancia Máxima: <strong>{viewingCertificateAsset.calibracion?.toleranciaError}</strong></p>
-                  <p className="text-slate-600">Fecha de Calibración: <strong>{viewingCertificateAsset.calibracion?.fechaCalibracion}</strong></p>
-                  <p className="text-slate-600">Fecha de Vencimiento: <strong className="text-rose-700">{viewingCertificateAsset.calibracion?.fechaVencimiento}</strong></p>
-                </div>
-              </div>
-
-              <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-sans mb-6">
-                <h4 className="font-bold text-slate-900 mb-2">Dictamen de Conformidad:</h4>
-                <p className="text-slate-600 leading-relaxed text-[11px]">
-                  El instrumento cumple satisfactoriamente con los requisitos de exactitud y límites de error permisibles estipulados por el fabricante y las normas metrológicas vigentes. Los patrones de referencia utilizados en esta calibración son trazables a patrones nacionales custodiados por INACAL y el Bureau International des Poids et Mesures (BIPM).
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-8 pt-6 border-t-2 border-slate-300 font-sans text-center text-xs">
-                <div>
-                  <div className="h-16 flex items-center justify-center italic text-slate-400">
-                    [ Sello de Acreditación Metrológica ]
-                  </div>
-                  <div className="border-t border-slate-400 pt-1">
-                    <p className="font-bold text-slate-900">Ing. Metrólogo Responsable</p>
-                    <p className="text-[10px] text-slate-500">CIP: 148920 • Laboratorio de Torsión y Presión</p>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="h-16 flex items-center justify-center italic text-slate-400">
-                    [ Firma de Aseguramiento de Calidad ]
-                  </div>
-                  <div className="border-t border-slate-400 pt-1">
-                    <p className="font-bold text-slate-900">Director Técnico</p>
-                    <p className="text-[10px] text-slate-500">Acreditación ISO/IEC 17025</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Real Official Certificate PDF Viewer Modal (No simulated certificates) */}
+      <CertificatePdfModal
+        isOpen={Boolean(viewingCertificateAsset)}
+        onClose={() => setViewingCertificateAsset(null)}
+        asset={viewingCertificateAsset}
+        onUpdatePdf={(assetId, pdfUrl) => {
+          if (!viewingCertificateAsset) return;
+          const updatedCal: CalibrationData = {
+            ...(viewingCertificateAsset.calibracion || { requiereCalibracion: true }),
+            certificadoPdfUrl: pdfUrl,
+          };
+          onUpdateAssetCalibration(assetId, updatedCal);
+          setViewingCertificateAsset({
+            ...viewingCertificateAsset,
+            calibracion: updatedCal,
+          });
+        }}
+      />
     </div>
   );
 };

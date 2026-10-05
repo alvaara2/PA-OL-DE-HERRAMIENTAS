@@ -1,5 +1,6 @@
 import { EmailSettings, LoanDispatch, PhysicalAsset } from '../types/workshop';
 import { evaluateCalibration } from './calibrationHelper';
+import { sendRealEmail } from './realEmailService';
 
 export interface EmailDispatchResult {
   success: boolean;
@@ -9,7 +10,7 @@ export interface EmailDispatchResult {
 }
 
 /**
- * Sends an email with strict timeout handling (max 5000ms) to prevent Vercel serverless timeouts
+ * Sends an email directly to Resend API without local /api/send-email routes
  */
 export async function sendEmailWithTimeout(
   settings: EmailSettings,
@@ -21,75 +22,28 @@ export async function sendEmailWithTimeout(
     timeStyle: 'medium',
   });
 
-  // Basic validation
-  if (!settings.remitente || !settings.remitente.includes('@')) {
-    return {
-      success: false,
-      message: 'Debe configurar un correo remitente válido (ej: usuario@gmail.com).',
-      timestamp,
-    };
-  }
-
-  if (settings.destinatarios.length === 0) {
-    return {
-      success: false,
-      message: 'Debe ingresar al menos un correo destinatario para recibir las alertas.',
-      timestamp,
-    };
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout to protect Vercel
+  const rawRecipients = (settings.destinatarios || []).filter(Boolean);
+  const targetRecipients = rawRecipients.length > 0 ? rawRecipients : ['alvaara2@gmail.com'];
 
   try {
-    // Attempt local API proxy first if running full-stack
-    const response = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        settings,
-        subject,
-        bodyHtml,
-      }),
-    }).catch(() => null);
-
-    clearTimeout(timeoutId);
-
-    if (response && response.ok) {
-      const data = await response.json();
-      return {
-        success: true,
-        message: data.message || 'Correo transmitido con éxito al servidor SMTP.',
-        timestamp,
-      };
-    }
-
-    // Client-safe fallback (e.g. deployed as static SPA on Vercel without custom Node server)
-    // Simulates successful dispatch and logs formal alert
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    const result = await sendRealEmail({
+      to: targetRecipients,
+      subject,
+      html: bodyHtml,
+      settings,
+    });
 
     return {
       success: true,
-      message: `Notificación despachada con éxito a ${settings.destinatarios.join(', ')} vía ${(settings.servidor || 'SMTP').toUpperCase()} (Tolerancia Vercel OK).`,
+      message: result.message,
       timestamp,
-      details: `Asunto: ${subject} | Remitente: ${settings.remitente}`,
+      details: `Asunto: ${subject}`,
     };
   } catch (err: unknown) {
-    clearTimeout(timeoutId);
     const errorMsg = err instanceof Error ? err.message : String(err);
-    if (errorMsg.includes('abort')) {
-      return {
-        success: false,
-        message: 'Timeout controlado (5s): El servidor de correo no respondió a tiempo. Verifique sus credenciales.',
-        timestamp,
-      };
-    }
     return {
       success: false,
-      message: `Error de conexión SMTP: ${errorMsg}`,
+      message: `Error al enviar correo: ${errorMsg}`,
       timestamp,
     };
   }

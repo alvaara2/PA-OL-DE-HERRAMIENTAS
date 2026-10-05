@@ -212,8 +212,8 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
         </div>
       `;
 
-      // 4. Llama por fetch('/api/send-email', { method: 'POST', body: ... })
-      await sendRealEmail({
+      // 4. Llama directamente a la API oficial de Resend (sin pasar por rutas locales intermedias que dan 405)
+      const res = await sendRealEmail({
         to: allRecipients,
         subject,
         html: bodyHtml,
@@ -221,8 +221,8 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
       });
 
       // 5. Confirmar ÚNICAMENTE tras recibir código de estado 200/OK del servidor
-      setAlertSuccessMessage(`✓ Alerta enviada con éxito a los ${allRecipients.length} destinatarios (Servidor 200 OK)`);
-      setTimeout(() => setAlertSuccessMessage(null), 6000);
+      setAlertSuccessMessage(res.message);
+      setTimeout(() => setAlertSuccessMessage(null), 8000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setAlertErrorMessage(`No se pudo enviar el correo de alerta: ${msg}`);
@@ -480,7 +480,7 @@ export const AlertMonitorView: React.FC<AlertMonitorViewProps> = ({
                       title="Enviar correo formal de sobretiempo al trabajador y a los 4 supervisores"
                     >
                       <Mail className="w-4 h-4 stroke-[2.5]" />
-                      <span>{isSendingEmailId === dispatch.id ? 'Enviando Alerta...' : '✉️ Enviar Correo de Alerta'}</span>
+                      <span>{isSendingEmailId === dispatch.id ? 'Enviando correos...' : '✉️ Enviar Correo de Alerta'}</span>
                     </button>
                   )}
 

@@ -26,6 +26,19 @@ app.post('/api/send-email', async (req, res) => {
   }
 });
 
+// Endpoint for Google Sheets =IMPORTDATA(".../api/kardex/export-csv")
+app.get('/api/kardex/export-csv', (_req, res) => {
+  const csvHeaders = 'FECHA_HORA,TIPO_EVENTO,CODIGO_ACTIVO,DESCRIPCION,TECNICO_DNI,TECNICO_NOMBRE,ORDEN_TRABAJO,ENCARGADO_TURNO,OBSERVACIONES\n';
+  const sampleRows = [
+    `"${new Date().toISOString()}","DESPACHO_SALIDA","DAD-IMP-1/2-17MM-001","Dado de Impacto 17mm 1/2","45892301","Juan Carlos Pérez Huamán","OT-4921 Mantenimiento Pala 3","Álvaro Aragón (Pañolero Central)","Despacho conforme con firma digital"`,
+    `"${new Date(Date.now() - 3600000).toISOString()}","ENTRADA_INICIAL","TORQ-SNA-001","Torquímetro Digital 1/2 Snap-on 20-250 FT-LB","-","-","-","Guido Pfari (Pañolero Turno B)","Calibración vigente INACAL CERT-2025-089"`
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="kardex_panolpro.csv"');
+  res.send(csvHeaders + sampleRows);
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'PanolPro Workshop Engine' });

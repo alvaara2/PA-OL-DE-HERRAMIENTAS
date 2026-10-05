@@ -40,6 +40,7 @@ import {
 import { calculateLoanAlert } from './utils/timeAlerts';
 import { evaluateCalibration } from './utils/calibrationHelper';
 import { sendEmailWithTimeout, buildCalibrationAlertEmailHtml } from './utils/emailService';
+import { FullBackupPayload } from './utils/indexedDBStorage';
 import { AlertOctagon, RotateCw, Lock } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -544,6 +545,80 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleRestoreFullBackup = (backup: FullBackupPayload) => {
+    // 1. Safe automatic checkpoint before overwriting
+    handleCreateCheckpoint(
+      `Pre-Restauración Backup (${new Date().toLocaleDateString('es-PE')})`,
+      'Respaldo de seguridad generado automáticamente antes de la restauración',
+      'automatico'
+    );
+
+    // 2. Overwrite state and localStorage
+    if (Array.isArray(backup.herramientas)) {
+      setAssets(backup.herramientas);
+      try {
+        localStorage.setItem(STORAGE_KEYS.ASSETS, JSON.stringify(backup.herramientas));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    if (Array.isArray(backup.trabajadores)) {
+      setTechnicians(backup.trabajadores);
+      try {
+        localStorage.setItem(STORAGE_KEYS.TECHNICIANS, JSON.stringify(backup.trabajadores));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    if (Array.isArray(backup.encargados) && backup.encargados.length > 0) {
+      setStorekeepers(backup.encargados);
+      try {
+        localStorage.setItem(STORAGE_KEYS.STOREKEEPERS, JSON.stringify(backup.encargados));
+        const firstActive = backup.encargados.find((s: any) => s.activo) || backup.encargados[0];
+        if (firstActive) {
+          setActiveStorekeeperId(firstActive.id);
+          localStorage.setItem(STORAGE_KEYS.ACTIVE_KEEPER, firstActive.id);
+        }
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    if (Array.isArray(backup.prestamos)) {
+      setDispatches(backup.prestamos);
+      try {
+        localStorage.setItem(STORAGE_KEYS.DISPATCHES, JSON.stringify(backup.prestamos));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    if (Array.isArray(backup.kardex)) {
+      setKardex(backup.kardex);
+      try {
+        localStorage.setItem(STORAGE_KEYS.KARDEX, JSON.stringify(backup.kardex));
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    if (backup.configuracion && typeof backup.configuracion === 'object') {
+      setEmailSettings((prev) => ({ ...prev, ...backup.configuracion }));
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.EMAIL_SETTINGS,
+          JSON.stringify({ ...emailSettings, ...backup.configuracion })
+        );
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+
+    broadcastRealtimeSync();
+  };
+
   const handleImportFullBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -576,6 +651,23 @@ export default function App() {
 
   const handleUpdateTechnician = (tech: Technician) => {
     setTechnicians((prev) => prev.map((t) => (t.id === tech.id ? tech : t)));
+    broadcastRealtimeSync();
+  };
+
+  const handleBatchImportTechnicians = (importedTechs: Technician[]) => {
+    setTechnicians((prev) => {
+      const map = new Map<string, Technician>();
+      prev.forEach((t) => map.set(t.dni.trim(), t));
+      importedTechs.forEach((t) => {
+        const existing = map.get(t.dni.trim());
+        if (existing) {
+          map.set(t.dni.trim(), { ...existing, ...t, id: existing.id });
+        } else {
+          map.set(t.dni.trim(), t);
+        }
+      });
+      return Array.from(map.values());
+    });
     broadcastRealtimeSync();
   };
 
@@ -1053,6 +1145,7 @@ export default function App() {
             onAddTechnician={handleAddTechnician}
             onUpdateTechnician={handleUpdateTechnician}
             onDeleteTechnician={handleDeleteTechnician}
+            onBatchImportTechnicians={handleBatchImportTechnicians}
           />
         )}
 
@@ -1071,6 +1164,7 @@ export default function App() {
             onDeleteAsset={handleDeleteAsset}
             onOpenLabelSheet={handleOpenLabelSheet}
             onDispatchAsset={handleDispatchAsset}
+            onImportAssets={handleImportAssets}
           />
         )}
 
@@ -1097,6 +1191,12 @@ export default function App() {
             activeDispatches={dispatches.filter((d) => d.items.some((it) => !it.retornado))}
             calibratedAssets={assets.filter((a) => a.calibracion?.requiereCalibracion)}
             storekeeperName={activeStorekeeper.nombreCompleto}
+            assets={assets}
+            technicians={technicians}
+            dispatches={dispatches}
+            storekeepers={storekeepers}
+            kardex={kardex}
+            onRestoreFullBackup={handleRestoreFullBackup}
           />
         )}
       </main>

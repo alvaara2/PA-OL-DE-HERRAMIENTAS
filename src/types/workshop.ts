@@ -52,6 +52,7 @@ export interface PhysicalAsset {
   
   // Metrological data
   calibracion?: CalibrationData;
+  certificadoPdfUrl?: string; // Shortcut to official laboratory calibration certificate PDF Base64
 }
 
 export interface StorekeeperProfile {

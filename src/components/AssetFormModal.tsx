@@ -5,9 +5,14 @@ import {
   Camera, 
   Sparkles, 
   MapPin, 
-  Image as ImageIcon 
+  Image as ImageIcon,
+  Award,
+  Upload,
+  FileText,
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
-import { PhysicalAsset, AssetCategory, AssetCondition, AssetStatus } from '../types/workshop';
+import { PhysicalAsset, AssetCategory, AssetCondition, AssetStatus, CalibrationData } from '../types/workshop';
 import { 
   generateUniquePhysicalCode, 
   detectCategory, 
@@ -49,6 +54,41 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
   const [fotoUrl, setFotoUrl] = useState<string>(assetToEdit?.fotoUrl || '');
   const [notas, setNotas] = useState(assetToEdit?.notas || '');
 
+  // Metrological Calibration fields
+  const [requiereCalibracion, setRequiereCalibracion] = useState<boolean>(
+    Boolean(
+      assetToEdit?.calibracion?.requiereCalibracion || 
+      assetToEdit?.categoria === 'torquimetro' || 
+      assetToEdit?.categoria === 'instrumento_medicion'
+    )
+  );
+  const [numeroCertificado, setNumeroCertificado] = useState<string>(
+    assetToEdit?.calibracion?.numeroCertificado || ''
+  );
+  const [entidadCertificadora, setEntidadCertificadora] = useState<string>(
+    assetToEdit?.calibracion?.entidadCertificadora || 'INACAL / Metrología Acreditada'
+  );
+  const [fechaCalibracion, setFechaCalibracion] = useState<string>(
+    assetToEdit?.calibracion?.fechaCalibracion || new Date().toISOString().split('T')[0]
+  );
+  const [fechaVencimiento, setFechaVencimiento] = useState<string>(() => {
+    if (assetToEdit?.calibracion?.fechaVencimiento) {
+      return assetToEdit.calibracion.fechaVencimiento;
+    }
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    return nextYear.toISOString().split('T')[0];
+  });
+  const [certificadoPdfUrl, setCertificadoPdfUrl] = useState<string>(
+    assetToEdit?.calibracion?.certificadoPdfUrl || (assetToEdit as any)?.certificadoPdfUrl || ''
+  );
+  const [pdfFileName, setPdfFileName] = useState<string>(
+    certificadoPdfUrl ? 'Certificado_Oficial_Adjunto.pdf' : ''
+  );
+  const [toleranciaError, setToleranciaError] = useState<string>(
+    assetToEdit?.calibracion?.toleranciaError || '± 2%'
+  );
+
   // Auto-generate code when creating a new asset and fields change
   useEffect(() => {
     if (!assetToEdit) {
@@ -81,6 +121,9 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     if (!assetToEdit) {
       const cat = detectCategory(text);
       setCategoria(cat);
+      if (cat === 'torquimetro' || cat === 'instrumento_medicion') {
+        setRequiereCalibracion(true);
+      }
       const isImp = /impacto/i.test(text) || cat === 'dado_impacto';
       setEsImpacto(isImp);
       const drv = extractDrive(text);
@@ -88,6 +131,13 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
       const m = extractMeasurement(text);
       if (m) setMedida(m);
       setFotoUrl(getAutoReferenceImage(text, marca));
+    }
+  };
+
+  const handleCategoryChange = (newCat: AssetCategory) => {
+    setCategoria(newCat);
+    if (newCat === 'torquimetro' || newCat === 'instrumento_medicion') {
+      setRequiereCalibracion(true);
     }
   };
 
@@ -106,12 +156,47 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     reader.readAsDataURL(file);
   };
 
+  // Handle Official Certificate PDF Upload
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      alert('Solo se admiten documentos en formato PDF (.pdf).');
+      return;
+    }
+
+    setPdfFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const dataUrl = evt.target?.result as string;
+      if (dataUrl) {
+        setCertificadoPdfUrl(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!codigoActivoFisico.trim() || !descripcion.trim()) {
       alert('El código físico y la descripción técnica son requeridos.');
       return;
     }
+
+    const calData: CalibrationData | undefined = requiereCalibracion
+      ? {
+          requiereCalibracion: true,
+          instrumentoTipo: descripcion.trim(),
+          rangoMedicion: medida.trim() || undefined,
+          fechaCalibracion: fechaCalibracion || undefined,
+          fechaVencimiento: fechaVencimiento || undefined,
+          entidadCertificadora: entidadCertificadora.trim() || 'INACAL / Metrología Acreditada',
+          numeroCertificado: numeroCertificado.trim() || undefined,
+          toleranciaError: toleranciaError.trim() || undefined,
+          certificadoPdfUrl: certificadoPdfUrl || undefined,
+        }
+      : undefined;
 
     const assetData: PhysicalAsset = {
       id: assetToEdit?.id || `asset-${Date.now()}`,
@@ -132,6 +217,8 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
       notas: notas.trim() || undefined,
       fechaAlta: assetToEdit?.fechaAlta || new Date().toISOString().split('T')[0],
       prestamoActivoId: assetToEdit?.prestamoActivoId,
+      calibracion: calData,
+      certificadoPdfUrl: certificadoPdfUrl || undefined,
     };
 
     onSave(assetData);
@@ -221,13 +308,14 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
               <label className="text-slate-700 font-bold block mb-1">Categoría:</label>
               <select
                 value={categoria}
-                onChange={(e) => setCategoria(e.target.value as AssetCategory)}
+                onChange={(e) => handleCategoryChange(e.target.value as AssetCategory)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
               >
                 <option value="dado_impacto">Dado de Impacto (Fosfatado)</option>
                 <option value="dado_estandar">Dado Estándar / Cromo</option>
                 <option value="extension">Extensión / Cardan</option>
-                <option value="torquimetro">Torquímetro / Dinamométrica</option>
+                <option value="torquimetro">Torquímetro / Dinamométrica (Requiere Calibración)</option>
+                <option value="instrumento_medicion">Instrumento de Medición (Vernier / Manómetro / Reloj)</option>
                 <option value="llave_combinada">Llave Combinada</option>
                 <option value="herramienta_electrica">Herramienta Eléctrica</option>
                 <option value="herramienta_neumatica">Herramienta Neumática</option>
@@ -339,6 +427,153 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Metrological Calibration & Official PDF Certificate Section */}
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={requiereCalibracion}
+                  onChange={(e) => setRequiereCalibracion(e.target.checked)}
+                  className="rounded border-slate-300 text-amber-500 focus:ring-amber-400 w-4 h-4"
+                />
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-amber-600" />
+                  Requiere Calibración Metrológica Periódica (Torquímetro / Vernier / Manómetro)
+                </span>
+              </label>
+              {requiereCalibracion && (
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-200">
+                  ISO/IEC 17025
+                </span>
+              )}
+            </div>
+
+            {requiereCalibracion && (
+              <div className="space-y-3 pt-2 border-t border-slate-200">
+                {/* PDF Certificate Upload Field */}
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      Certificado de Calibración Oficial del Proveedor/Laboratorio (PDF Original):
+                    </span>
+                    {certificadoPdfUrl ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> PDF Cargado
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium">Pendiente</span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition font-bold text-xs shadow-xs">
+                      <Upload className="w-3.5 h-3.5" />
+                      {certificadoPdfUrl ? 'Reemplazar Certificado PDF' : 'Subir Archivo PDF Oficial (.pdf)'}
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={handlePdfUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {certificadoPdfUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCertificadoPdfUrl('');
+                          setPdfFileName('');
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-2 text-rose-600 hover:bg-rose-50 rounded-xl transition font-bold text-xs"
+                        title="Quitar PDF adjunto"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Quitar
+                      </button>
+                    )}
+
+                    {pdfFileName && (
+                      <span className="text-xs font-mono text-slate-600 truncate max-w-[220px]">
+                        📄 {pdfFileName}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metadata Fields: Number, Issuer, Cal Date, Expiry Date */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-700 font-bold block mb-1">
+                      Número de Certificado:
+                    </label>
+                    <input
+                      type="text"
+                      value={numeroCertificado}
+                      onChange={(e) => setNumeroCertificado(e.target.value)}
+                      placeholder="Ej: CERT-2026-0891, CL-2025-4491..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-700 font-bold block mb-1">
+                      Entidad / Laboratorio Calibrador:
+                    </label>
+                    <input
+                      type="text"
+                      value={entidadCertificadora}
+                      onChange={(e) => setEntidadCertificadora(e.target.value)}
+                      placeholder="INACAL, SGS, Metrología del Sur..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-700 font-bold block mb-1">
+                      Fecha de Calibración:
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaCalibracion}
+                      onChange={(e) => setFechaCalibracion(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-700 font-bold block mb-1">
+                      Fecha de Vencimiento: *
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaVencimiento}
+                      onChange={(e) => setFechaVencimiento(e.target.value)}
+                      required={requiereCalibracion}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 font-bold text-rose-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-700 font-bold block mb-1">
+                      Tolerancia Máxima / Error Permisible:
+                    </label>
+                    <input
+                      type="text"
+                      value={toleranciaError}
+                      onChange={(e) => setToleranciaError(e.target.value)}
+                      placeholder="± 4% horario, ± 0.02 mm..."
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Condition and Status */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Search, 
   Plus, 
@@ -13,12 +13,28 @@ import {
   Edit3, 
   Trash2,
   ArrowUpRight,
-  Lock
+  Lock,
+  FileText,
+  Award,
+  Upload,
+  CheckCircle2,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { PhysicalAsset, AssetCategory, AssetStatus } from '../types/workshop';
 import { AssetFormModal } from './AssetFormModal';
+import { CertificatePdfModal } from './CertificatePdfModal';
 import { evaluateCalibration } from '../utils/calibrationHelper';
 import * as XLSX from 'xlsx';
+import { downloadToolsTemplate } from '../utils/excelTemplates';
+import { 
+  generateUniquePhysicalCode, 
+  detectCategory, 
+  extractDrive, 
+  extractMeasurement, 
+  suggestLocation 
+} from '../utils/assetCoder';
+import { getAutoReferenceImage } from '../utils/imageCatalog';
 
 interface CatalogViewProps {
   assets: PhysicalAsset[];
@@ -26,6 +42,7 @@ interface CatalogViewProps {
   onDeleteAsset: (id: string) => void;
   onOpenLabelSheet: (assetsToPrint: PhysicalAsset[]) => void;
   onDispatchAsset: (asset: PhysicalAsset) => void;
+  onImportAssets?: (newAssets: PhysicalAsset[]) => void;
 }
 
 export const CatalogView: React.FC<CatalogViewProps> = ({
@@ -34,6 +51,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   onDeleteAsset,
   onOpenLabelSheet,
   onDispatchAsset,
+  onImportAssets,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -46,6 +64,15 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   // Modal state
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [assetToEdit, setAssetToEdit] = useState<PhysicalAsset | null>(null);
+
+  // Official Certificate Viewer modal
+  const [selectedCertificateAsset, setSelectedCertificateAsset] = useState<PhysicalAsset | null>(null);
+
+  // Bulk Excel Tools Import state
+  const toolsFileInputRef = useRef<HTMLInputElement>(null);
+  const [isToolsImportModalOpen, setIsToolsImportModalOpen] = useState(false);
+  const [previewTools, setPreviewTools] = useState<PhysicalAsset[]>([]);
+  const [toolsToastMessage, setToolsToastMessage] = useState<string | null>(null);
 
   // Filter logic
   const filteredAssets = assets.filter((asset) => {
@@ -99,6 +126,144 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     XLSX.writeFile(wb, `CATALOGO_HERRAMIENTAS_PANOL_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+  // Handle Excel Tools Upload
+  const handleToolsExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+
+        if (rawData.length < 2) {
+          alert('El archivo Excel no contiene filas de datos.');
+          return;
+        }
+
+        const rawHeaders = (rawData[0] || []) as unknown[];
+        const headers = rawHeaders.map((h) => (h || '').toString().toLowerCase().trim());
+
+        const codCol = headers.findIndex((h) => /codigo|código|placa|activo|code/.test(h));
+        const nombreCol = headers.findIndex((h) => /nombre|descrip|herramienta|item|pieza/.test(h));
+        const catCol = headers.findIndex((h) => /categoria|categoría|tipo|clase|family/.test(h));
+        const ubicCol = headers.findIndex((h) => /ubicaci|estante|tablero|lugar|location/.test(h));
+        const calCol = headers.findIndex((h) => /requiere_calibracion|calibraci|calibrado|requiere/.test(h));
+        const marcaCol = headers.findIndex((h) => /marca|brand/.test(h));
+
+        const dataRows = rawData.slice(1);
+        const existingCodes = new Set(assets.map((a) => a.codigoActivoFisico.toUpperCase().trim()));
+        const parsedList: PhysicalAsset[] = [];
+        const usedCodes = [...assets.map((a) => a.codigoActivoFisico)];
+
+        dataRows.forEach((row, idx) => {
+          const rowArr = (row || []) as unknown[];
+          const rawNombre = String(rowArr[nombreCol !== -1 ? nombreCol : 1] || rowArr[0] || '').trim();
+          if (!rawNombre) return;
+
+          let rawCod = codCol !== -1 ? String(rowArr[codCol] || '').trim().toUpperCase() : '';
+          const rawCat = catCol !== -1 ? String(rowArr[catCol] || '').toLowerCase().trim() : '';
+          const rawUbic = ubicCol !== -1 ? String(rowArr[ubicCol] || '').trim() : '';
+          const rawCal = calCol !== -1 ? String(rowArr[calCol] || '').toLowerCase().trim() : '';
+          const rawMarca = marcaCol !== -1 ? String(rowArr[marcaCol] || '').trim() : 'GENÉRICO';
+
+          const detectedCat = detectCategory(rawNombre);
+          let finalCat: AssetCategory = detectedCat;
+          if (rawCat.includes('impacto')) finalCat = 'dado_impacto';
+          else if (rawCat.includes('torquim')) finalCat = 'torquimetro';
+          else if (rawCat.includes('medicion') || rawCat.includes('vernier') || rawCat.includes('manomet')) finalCat = 'instrumento_medicion';
+          else if (rawCat.includes('electr')) finalCat = 'herramienta_electrica';
+          else if (rawCat.includes('neumat')) finalCat = 'herramienta_neumatica';
+          else if (rawCat.includes('extens')) finalCat = 'extension';
+          else if (rawCat.includes('manual') || rawCat.includes('llave')) finalCat = 'herramienta_manual';
+
+          const reqCal = rawCal === 'si' || rawCal === 'true' || rawCal === '1' || finalCat === 'torquimetro' || finalCat === 'instrumento_medicion';
+
+          const drive = extractDrive(rawNombre) || undefined;
+          const measurement = extractMeasurement(rawNombre) || undefined;
+          const isImpact = finalCat === 'dado_impacto' || /impacto/i.test(rawNombre);
+
+          // Auto-generate code if empty or already used
+          if (!rawCod || existingCodes.has(rawCod) || usedCodes.includes(rawCod)) {
+            rawCod = generateUniquePhysicalCode(
+              {
+                descripcion: rawNombre,
+                marca: rawMarca,
+                medida: measurement,
+                encastre: drive,
+                categoria: finalCat,
+                esImpacto: isImpact,
+              },
+              usedCodes
+            );
+          }
+          usedCodes.push(rawCod);
+
+          const finalUbic = rawUbic || suggestLocation(finalCat, isImpact);
+
+          const calData = reqCal ? {
+            requiereCalibracion: true,
+            instrumentoTipo: rawNombre,
+            entidadCertificadora: 'INACAL / Metrología Acreditada',
+            toleranciaError: '± 2% / Conforme',
+          } : undefined;
+
+          parsedList.push({
+            id: `asset-imp-${Date.now()}-${idx}`,
+            codigoActivoFisico: rawCod,
+            descripcion: rawNombre,
+            categoria: finalCat,
+            familia: finalCat.toUpperCase(),
+            marca: rawMarca || 'GENÉRICO',
+            medida: measurement,
+            encastre: drive,
+            esImpacto: isImpact,
+            ubicacion: finalUbic,
+            estado: 'disponible',
+            condicionFisica: 'operativo',
+            fotoUrl: getAutoReferenceImage(rawNombre, rawMarca),
+            fechaAlta: new Date().toISOString().split('T')[0],
+            calibracion: calData,
+          });
+        });
+
+        if (parsedList.length === 0) {
+          alert('No se pudieron extraer herramientas válidas del archivo Excel.');
+          return;
+        }
+
+        setPreviewTools(parsedList);
+        setIsToolsImportModalOpen(true);
+      } catch (err) {
+        alert('Error al leer el archivo Excel de herramientas.');
+      } finally {
+        if (toolsFileInputRef.current) {
+          toolsFileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const handleConfirmToolsImport = () => {
+    if (previewTools.length === 0) return;
+
+    if (onImportAssets) {
+      onImportAssets(previewTools);
+    } else {
+      previewTools.forEach((t) => onSaveAsset(t));
+    }
+
+    setToolsToastMessage(`✅ ${previewTools.length} herramientas guardadas en el inventario activo.`);
+    setIsToolsImportModalOpen(false);
+    setPreviewTools([]);
+    setTimeout(() => setToolsToastMessage(null), 5000);
+  };
+
   const selectedAssetObjects = assets.filter((a) => selectedAssetIds.includes(a.id));
 
   return (
@@ -118,6 +283,33 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Cargar Herramientas desde Excel */}
+          <button
+            type="button"
+            onClick={() => toolsFileInputRef.current?.click()}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs border border-blue-200 transition cursor-pointer"
+          >
+            <Upload className="w-4 h-4 text-blue-600" />
+            <span>📥 Cargar Herramientas desde Excel</span>
+          </button>
+          <input
+            ref={toolsFileInputRef}
+            type="file"
+            accept=".xlsx, .xls, .csv"
+            onChange={handleToolsExcelUpload}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={downloadToolsTemplate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 transition cursor-pointer"
+            title="Descargar Plantilla Base Excel para importación de herramientas"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+            <span>Descargar Plantilla Base Excel</span>
+          </button>
+
           <button
             onClick={() => {
               if (selectedAssetObjects.length === 0) {
@@ -154,6 +346,14 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      {toolsToastMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2.5 shadow-sm animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{toolsToastMessage}</span>
+        </div>
+      )}
 
       {/* Filter and View Toolbar */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
@@ -349,6 +549,38 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                       <span className="truncate font-medium">{asset.ubicacion}</span>
                     </p>
+
+                    {/* Metrology semáforo & Official Certificate Button */}
+                    {asset.calibracion?.requiereCalibracion && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1">
+                          {calEval.estadoMetrologico === 'vigente' && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              🟢 Vigente ({calEval.diasRestantes}d)
+                            </span>
+                          )}
+                          {calEval.estadoMetrologico === 'por_vencer' && (
+                            <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              🟡 Vence en {calEval.diasRestantes}d
+                            </span>
+                          )}
+                          {calEval.estadoMetrologico === 'vencido' && (
+                            <span className="text-[10px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full animate-pulse">
+                              🔴 Vencido
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCertificateAsset(asset)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>📄 Ver Certificado Oficial</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -449,7 +681,35 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       </span>
                     </td>
                     <td className="p-3 text-slate-800 font-semibold">
-                      {asset.descripcion}
+                      <div>{asset.descripcion}</div>
+                      {asset.calibracion?.requiereCalibracion && (
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          {calEval.estadoMetrologico === 'vigente' && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                              🟢 Vigente ({calEval.diasRestantes}d)
+                            </span>
+                          )}
+                          {calEval.estadoMetrologico === 'por_vencer' && (
+                            <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              🟡 Vence en {calEval.diasRestantes}d
+                            </span>
+                          )}
+                          {calEval.estadoMetrologico === 'vencido' && (
+                            <span className="text-[10px] font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full animate-pulse">
+                              🔴 Vencido
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCertificateAsset(asset)}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>📄 Ver Certificado Oficial</span>
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="p-3 text-slate-600">
                       {asset.marca} {asset.medida && `• ${asset.medida}`} {asset.encastre && `(${asset.encastre}")`}
@@ -528,6 +788,135 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         assetToEdit={assetToEdit}
         existingCodes={assets.map((a) => a.codigoActivoFisico)}
       />
+
+      {/* Official Certificate PDF Viewer Modal */}
+      <CertificatePdfModal
+        isOpen={Boolean(selectedCertificateAsset)}
+        onClose={() => setSelectedCertificateAsset(null)}
+        asset={selectedCertificateAsset}
+        onUpdatePdf={(assetId, pdfUrl) => {
+          if (!selectedCertificateAsset) return;
+          const updated: PhysicalAsset = {
+            ...selectedCertificateAsset,
+            calibracion: {
+              ...(selectedCertificateAsset.calibracion || { requiereCalibracion: true }),
+              certificadoPdfUrl: pdfUrl,
+            },
+          };
+          onSaveAsset(updated);
+          setSelectedCertificateAsset(updated);
+        }}
+      />
+
+      {/* Modal Vista Previa de Importación de Herramientas desde Excel */}
+      {isToolsImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-4xl bg-white border border-slate-200 rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-900">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Wrench className="w-5 h-5 text-blue-600" />
+                  <span>Vista Previa de Importación de Herramientas y Dados</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Se detectaron <strong>{previewTools.length}</strong> ítems: <strong>{previewTools.filter((t) => !t.calibracion?.requiereCalibracion).length}</strong> herramientas estándar y <strong>{previewTools.filter((t) => t.calibracion?.requiereCalibracion).length}</strong> instrumentos de medición / calibrados.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsToolsImportModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Counters Badge Strip */}
+            <div className="px-6 py-3 bg-slate-100/70 border-b border-slate-200 flex flex-wrap items-center gap-3 text-xs font-bold">
+              <span className="bg-white border border-slate-200 px-3 py-1 rounded-xl text-slate-700">
+                📦 Total a incorporar: <strong>{previewTools.length}</strong>
+              </span>
+              <span className="bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl text-blue-800">
+                🔧 Estándar / Operativas: <strong>{previewTools.filter((t) => !t.calibracion?.requiereCalibracion).length}</strong>
+              </span>
+              <span className="bg-amber-50 border border-amber-200 px-3 py-1 rounded-xl text-amber-900 flex items-center gap-1">
+                <Award className="w-3.5 h-3.5 text-amber-600" />
+                Medición / Calibración: <strong>{previewTools.filter((t) => t.calibracion?.requiereCalibracion).length}</strong>
+              </span>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 p-6 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                    <th className="pb-2">Código Físico</th>
+                    <th className="pb-2">Nombre / Descripción</th>
+                    <th className="pb-2">Categoría</th>
+                    <th className="pb-2">Ubicación Tablero</th>
+                    <th className="pb-2 text-center">Calibración</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {previewTools.map((tool, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-2.5 font-mono font-bold text-slate-900">
+                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200">
+                          {tool.codigoActivoFisico}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-slate-900 font-semibold">{tool.descripcion}</td>
+                      <td className="py-2.5 text-slate-600 uppercase text-[10px] font-bold">{tool.categoria}</td>
+                      <td className="py-2.5 text-slate-600">📍 {tool.ubicacion}</td>
+                      <td className="py-2.5 text-center">
+                        {tool.calibracion?.requiereCalibracion ? (
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                            <Award className="w-3 h-3 text-amber-600" /> Requiere Calibración
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                            Estándar
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => downloadToolsTemplate()}
+                className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Descargar Plantilla Base Excel
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsToolsImportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 font-bold text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmToolsImport}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition cursor-pointer"
+                >
+                  Guardar en Inventario ({previewTools.length})
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

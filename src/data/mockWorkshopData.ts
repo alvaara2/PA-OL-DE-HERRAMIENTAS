@@ -1,4 +1,5 @@
 import { PhysicalAsset, Technician, LoanDispatch, StorekeeperProfile, EmailSettings, KardexEntry, SystemCheckpoint } from '../types/workshop';
+import { generateSampleCalibrationPdf } from '../utils/pdfHelper';
 
 const now = new Date();
 const hoursAgo = (hours: number): string => {
@@ -143,6 +144,14 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
       numeroCertificado: 'CERT-CAL-2026-0419',
       toleranciaError: '± 4% horario',
       observacionesMetrologicas: 'Calibración trazable bajo norma ISO 6789-2:2017.',
+      certificadoPdfUrl: generateSampleCalibrationPdf(
+        'TORQ-SNA-001',
+        'Torquímetro de Quiebre Snap-on 1/2" 50-250 Ft-Lb',
+        'CERT-CAL-2026-0419',
+        'INACAL / Metrología Industrial Acreditada',
+        '2026-03-10',
+        daysFromNow(160)
+      ),
     },
   },
 
@@ -174,6 +183,14 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
       entidadCertificadora: 'Metrología del Sur S.A.C.',
       numeroCertificado: 'MS-2025-8831',
       toleranciaError: '± 3%',
+      certificadoPdfUrl: generateSampleCalibrationPdf(
+        'TORQ-PRO-001',
+        'Torquímetro de Precisión Proto 3/8" 20-100 Ft-Lb',
+        'MS-2025-8831',
+        'Metrología del Sur S.A.C.',
+        '2025-10-20',
+        daysFromNow(18)
+      ),
     },
   },
 
@@ -205,6 +222,14 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
       numeroCertificado: 'CL-2025-4491',
       toleranciaError: '± 0.02 mm',
       observacionesMetrologicas: 'REQUERIMIENTO: Enviar a laboratorio antes de nuevo uso.',
+      certificadoPdfUrl: generateSampleCalibrationPdf(
+        'VER-MIT-001',
+        'Calibrador Pie de Rey Vernier Digital Mitutoyo 0-150mm',
+        'CL-2025-4491',
+        'CertiLab Metrología Industrial',
+        '2025-08-15',
+        daysFromNow(-12)
+      ),
     },
   },
 
@@ -234,6 +259,14 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
       entidadCertificadora: 'SGS del Perú S.A.C.',
       numeroCertificado: 'SGS-CAL-2026-104',
       toleranciaError: 'Clase 1.0 (± 1.0%)',
+      certificadoPdfUrl: generateSampleCalibrationPdf(
+        'MAN-WIK-001',
+        'Manómetro Patrón de Presión Hidráulica WIKA 0-600 PSI',
+        'SGS-CAL-2026-104',
+        'SGS del Perú S.A.C.',
+        '2026-02-15',
+        daysFromNow(130)
+      ),
     },
   },
 

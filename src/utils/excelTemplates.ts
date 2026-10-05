@@ -7,85 +7,63 @@ import { KardexEntry } from '../types/workshop';
 export function downloadToolsTemplate() {
   const data = [
     {
-      Descripcion: 'Dado de impacto 17mm encastre 1/2',
-      Tipo: 'Dado de Impacto',
-      Marca: 'DeWalt',
-      Modelo: 'DW-IMP-17',
-      Encastre: '1/2',
-      Medida: '17MM',
-      Serie: 'DW-17-001',
+      Codigo_Fisico: 'DAD-IMP-1/2-17MM-001',
+      Nombre_Herramienta: 'Dado de impacto 17mm encastre 1/2',
+      Categoria: 'dado_impacto',
       Ubicacion: 'Tablero Sombra #1',
-      RequiereCalibracion: 'NO',
-      FrecuenciaMeses: '',
-      Cantidad: 1,
+      Requiere_Calibracion: 'NO',
+      Frecuencia_Meses: '',
     },
     {
-      Descripcion: 'Torquímetro digital de precisión 1/2 (20-250 ft-lb)',
-      Tipo: 'Torquímetro',
-      Marca: 'Snap-on',
-      Modelo: 'TECH3FR250',
-      Encastre: '1/2',
-      Medida: '20-250 FT-LB',
-      Serie: 'SNA-TRQ-8902',
+      Codigo_Fisico: 'TORQ-SNA-1/2-001',
+      Nombre_Herramienta: 'Torquímetro digital de precisión 1/2 (20-250 ft-lb)',
+      Categoria: 'torquimetro',
       Ubicacion: 'Estante Calibrados A-1',
-      RequiereCalibracion: 'SI',
-      FrecuenciaMeses: 12,
-      Cantidad: 1,
+      Requiere_Calibracion: 'SI',
+      Frecuencia_Meses: 12,
     },
     {
-      Descripcion: 'Taladro percutor inalámbrico Brushless 20V MAX',
-      Tipo: 'Herramienta Eléctrica',
-      Marca: 'DeWalt',
-      Modelo: 'DCD996',
-      Encastre: '1/2 Chuck',
-      Medida: '20V',
-      Serie: 'DW-PERC-4401',
-      Ubicacion: 'Gabinete Eléctrico Bahía 1',
-      RequiereCalibracion: 'NO',
-      FrecuenciaMeses: '',
-      Cantidad: 1,
-    },
-    {
-      Descripcion: 'Extensión de impacto 1/2 x 10 pulgadas',
-      Tipo: 'Extensión',
-      Marca: 'Proto',
-      Modelo: 'J7410P',
-      Encastre: '1/2',
-      Medida: '10IN',
-      Serie: 'PRT-EXT-10',
-      Ubicacion: 'Tablero Sombra #1',
-      RequiereCalibracion: 'NO',
-      FrecuenciaMeses: '',
-      Cantidad: 1,
-    },
-    {
-      Descripcion: 'Micrómetro de exteriores digital 0-25 mm',
-      Tipo: 'Instrumento de Medición',
-      Marca: 'Mitutoyo',
-      Modelo: '293-240-30',
-      Encastre: '',
-      Medida: '0-25 MM',
-      Serie: 'MIT-MIC-5521',
+      Codigo_Fisico: 'VER-MIT-150-001',
+      Nombre_Herramienta: 'Vernier digital Mitutoyo 150mm (0.01mm)',
+      Categoria: 'instrumento_medicion',
       Ubicacion: 'Estante Metrológico B-2',
-      RequiereCalibracion: 'SI',
-      FrecuenciaMeses: 6,
-      Cantidad: 1,
+      Requiere_Calibracion: 'SI',
+      Frecuencia_Meses: 6,
+    },
+    {
+      Codigo_Fisico: 'TAL-DEW-20V-001',
+      Nombre_Herramienta: 'Taladro percutor inalámbrico Brushless 20V MAX',
+      Categoria: 'herramienta_electrica',
+      Ubicacion: 'Gabinete Eléctrico Bahía 1',
+      Requiere_Calibracion: 'NO',
+      Frecuencia_Meses: '',
+    },
+    {
+      Codigo_Fisico: 'EXT-PRO-1/2-10-001',
+      Nombre_Herramienta: 'Extensión de impacto 1/2 x 10 pulgadas',
+      Categoria: 'extension',
+      Ubicacion: 'Tablero Sombra #1',
+      Requiere_Calibracion: 'NO',
+      Frecuencia_Meses: '',
+    },
+    {
+      Codigo_Fisico: 'MAN-WIK-0-100-001',
+      Nombre_Herramienta: 'Manómetro de presión hidráulica Wika 0-100 BAR',
+      Categoria: 'instrumento_medicion',
+      Ubicacion: 'Estante Metrológico B-1',
+      Requiere_Calibracion: 'SI',
+      Frecuencia_Meses: 12,
     },
   ];
 
   const ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [
-    { wch: 45 }, // Descripcion
-    { wch: 22 }, // Tipo
-    { wch: 15 }, // Marca
-    { wch: 15 }, // Modelo
-    { wch: 12 }, // Encastre
-    { wch: 15 }, // Medida
-    { wch: 16 }, // Serie
-    { wch: 25 }, // Ubicacion
-    { wch: 20 }, // RequiereCalibracion
-    { wch: 18 }, // FrecuenciaMeses
-    { wch: 10 }, // Cantidad
+    { wch: 24 }, // Codigo_Fisico
+    { wch: 45 }, // Nombre_Herramienta
+    { wch: 22 }, // Categoria
+    { wch: 26 }, // Ubicacion
+    { wch: 22 }, // Requiere_Calibracion
+    { wch: 18 }, // Frecuencia_Meses
   ];
 
   const wb = XLSX.utils.book_new();
@@ -99,52 +77,47 @@ export function downloadToolsTemplate() {
 export function downloadWorkersTemplate() {
   const data = [
     {
-      Nombres: 'Juan Carlos',
-      Apellidos: 'Pérez Huamán',
       DNI: '45892301',
+      'Nombres y Apellidos': 'Juan Carlos Pérez Huamán',
       Cargo: 'Mecánico Diésel Senior',
       Area: 'Bahía 02 - Mantenimiento Mayor',
-      Telefono: '+51 984 512 809',
       Correo: 'j.perez@tallerindustrial.pe',
+      Celular: '+51 984 512 809',
     },
     {
-      Nombres: 'Carlos Eduardo',
-      Apellidos: 'Mendoza Silva',
       DNI: '72109482',
+      'Nombres y Apellidos': 'Carlos Eduardo Mendoza Silva',
       Cargo: 'Técnico de Maquinaria Pesada',
       Area: 'Línea de Camiones Mineros 797F',
-      Telefono: '+51 976 341 220',
       Correo: 'c.mendoza@tallerindustrial.pe',
+      Celular: '+51 976 341 220',
     },
     {
-      Nombres: 'Miguel Ángel',
-      Apellidos: 'Quispe Mamani',
       DNI: '48902143',
+      'Nombres y Apellidos': 'Miguel Ángel Quispe Mamani',
       Cargo: 'Electricista Industrial e Instrumentista',
       Area: 'Taller Eléctrico Central',
-      Telefono: '+51 951 890 124',
       Correo: 'm.quispe@tallerindustrial.pe',
+      Celular: '+51 951 890 124',
     },
     {
-      Nombres: 'Roberto',
-      Apellidos: 'Flores Valdivia',
       DNI: '70451239',
+      'Nombres y Apellidos': 'Roberto Flores Valdivia',
       Cargo: 'Soldador Estructural 6G / Calderero',
       Area: 'Área de Recuperación de Componentes',
-      Telefono: '+51 982 443 119',
       Correo: 'r.flores@tallerindustrial.pe',
+      Celular: '+51 982 443 119',
     },
   ];
 
   const ws = XLSX.utils.json_to_sheet(data);
   ws['!cols'] = [
-    { wch: 20 }, // Nombres
-    { wch: 22 }, // Apellidos
     { wch: 14 }, // DNI
+    { wch: 32 }, // Nombres y Apellidos
     { wch: 32 }, // Cargo
     { wch: 35 }, // Area
-    { wch: 18 }, // Telefono
     { wch: 30 }, // Correo
+    { wch: 18 }, // Celular
   ];
 
   const wb = XLSX.utils.book_new();
@@ -202,4 +175,50 @@ export function exportKardexToExcel(kardexEntries: KardexEntry[]) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Kardex_Movimientos');
   XLSX.writeFile(wb, `Kardex_Movimientos_Almacen_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+/**
+ * Exports Kardex entries directly to clean UTF-8 CSV for Google Sheets
+ */
+export function exportKardexToCSV(kardexEntries: KardexEntry[]) {
+  const headers = [
+    'FECHA_HORA',
+    'TIPO_EVENTO',
+    'CODIGO_ACTIVO',
+    'DESCRIPCION',
+    'TECNICO_DNI',
+    'TECNICO_NOMBRE',
+    'ORDEN_TRABAJO',
+    'ENCARGADO_ALMACEN',
+    'N_VALE',
+    'CONDICION',
+    'OBSERVACIONES',
+  ];
+
+  const rows = kardexEntries.map((e) =>
+    [
+      `"${e.fecha}"`,
+      `"${e.tipoEvento.toUpperCase()}"`,
+      `"${e.codigoActivoFisico}"`,
+      `"${(e.descripcion || '').replace(/"/g, '""')}"`,
+      `"${e.tecnicoDni || '-'}"`,
+      `"${(e.tecnicoNombre || '-').replace(/"/g, '""')}"`,
+      `"${e.ordenTrabajo || '-'}"`,
+      `"${(e.almaceneroNombre || '-').replace(/"/g, '""')}"`,
+      `"${e.valeId || '-'}"`,
+      `"${e.condicion || 'OPERATIVO'}"`,
+      `"${(e.observaciones || '-').replace(/"/g, '""')}"`,
+    ].join(',')
+  );
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Kardex_Movimientos_GoogleSheets_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
