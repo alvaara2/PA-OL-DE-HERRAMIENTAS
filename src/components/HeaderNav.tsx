@@ -14,7 +14,8 @@ import {
   Mail,
   ShieldCheck,
   ChevronDown,
-  Tv
+  Tv,
+  Trash2
 } from 'lucide-react';
 import { LoanDispatch, StorekeeperProfile } from '../types/workshop';
 import { calculateLoanAlert } from '../utils/timeAlerts';
@@ -41,6 +42,7 @@ interface HeaderNavProps {
   onOpenQuickDispatch: () => void;
   onOpenScanner: () => void;
   onOpenCheckpoints: () => void;
+  onOpenBulkDelete: () => void;
   syncState: 'synced' | 'syncing' | 'offline';
   onManualSync: () => void;
 }
@@ -54,6 +56,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   onOpenQuickDispatch,
   onOpenScanner,
   onOpenCheckpoints,
+  onOpenBulkDelete,
   syncState,
   onManualSync,
 }) => {
@@ -139,6 +142,16 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
             >
               <History className="w-3.5 h-3.5 text-blue-600" />
               <span className="hidden md:inline">Checkpoints</span>
+            </button>
+
+            {/* Menú de Borrado en General / Purga Masiva */}
+            <button
+              onClick={onOpenBulkDelete}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition cursor-pointer"
+              title="Menú de Borrado en General & Purga Masiva"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span className="hidden md:inline">Borrado Masivo</span>
             </button>
 
             <button

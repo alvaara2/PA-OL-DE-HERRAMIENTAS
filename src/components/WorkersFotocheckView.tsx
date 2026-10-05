@@ -35,6 +35,7 @@ interface WorkersFotocheckViewProps {
   onUpdateTechnician: (tech: Technician) => void;
   onDeleteTechnician: (id: string) => void;
   onBatchImportTechnicians?: (techs: Technician[]) => void;
+  onOpenBulkDelete?: () => void;
 }
 
 export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
@@ -43,6 +44,7 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
   onUpdateTechnician,
   onDeleteTechnician,
   onBatchImportTechnicians,
+  onOpenBulkDelete,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cargoFilter, setCargoFilter] = useState('all');
@@ -372,6 +374,16 @@ export const WorkersFotocheckView: React.FC<WorkersFotocheckViewProps> = ({
           >
             <Download className="w-4 h-4 text-emerald-600" />
             Exportar Excel
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenBulkDelete}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition cursor-pointer"
+            title="Abrir Menú de Borrado en General para depurar técnicos"
+          >
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>Borrado Masivo</span>
           </button>
 
           <button

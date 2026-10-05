@@ -33,9 +33,10 @@ import {
 interface KardexViewProps {
   entries: KardexEntry[];
   onAddManualEntry?: (entry: KardexEntry) => void;
+  onOpenBulkDelete?: () => void;
 }
 
-export const KardexView: React.FC<KardexViewProps> = ({ entries }) => {
+export const KardexView: React.FC<KardexViewProps> = ({ entries, onOpenBulkDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [tipoFilter, setTipoFilter] = useState<'all' | KardexEventType>('all');
   const [startDate, setStartDate] = useState('');
@@ -204,12 +205,24 @@ export const KardexView: React.FC<KardexViewProps> = ({ entries }) => {
 
           <button
             onClick={downloadWorkersTemplate}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition"
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition cursor-pointer"
             title="Descargar plantilla de Excel para importar personal técnico"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             Plantilla Trabajadores
           </button>
+
+          {onOpenBulkDelete && (
+            <button
+              type="button"
+              onClick={onOpenBulkDelete}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition cursor-pointer"
+              title="Abrir Menú de Borrado Masivo para purgar movimientos del Kardex"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" />
+              <span>Purgar Kardex Masivo</span>
+            </button>
+          )}
         </div>
       </div>
 

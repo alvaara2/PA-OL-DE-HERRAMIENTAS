@@ -16,7 +16,8 @@ import {
   FolderArchive,
   RotateCcw,
   AlertTriangle,
-  FileJson
+  FileJson,
+  Trash2
 } from 'lucide-react';
 import { 
   EmailSettings, 
@@ -51,6 +52,7 @@ interface EmailSettingsViewProps {
   storekeepers?: StorekeeperProfile[];
   kardex?: KardexEntry[];
   onRestoreFullBackup?: (backupData: FullBackupPayload) => void;
+  onOpenBulkDelete?: () => void;
 }
 
 export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
@@ -62,6 +64,7 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
   storekeepers = [],
   kardex = [],
   onRestoreFullBackup,
+  onOpenBulkDelete,
 }) => {
   // Resend API Key & Sender configuration
   const [resendApiKey, setResendApiKey] = useState(
@@ -585,6 +588,29 @@ export const EmailSettingsView: React.FC<EmailSettingsViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Centro de Borrado en General y Purga */}
+        {onOpenBulkDelete && (
+          <div className="p-5 rounded-2xl bg-rose-50/60 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 font-bold text-rose-950 text-sm">
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Menú de Borrado en General & Purga Masiva</span>
+              </div>
+              <p className="text-xs text-rose-800 leading-relaxed max-w-xl">
+                Depure o vacíe registros en masa: herramientas por condición, técnicos sin pendientes, vales cerrados, auditoría Kardex o reinicio total con respaldo automático.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenBulkDelete}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-md shadow-rose-600/20 transition cursor-pointer shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Abrir Menú de Borrado Masivo</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Confirmation Modal for Full Restore */}

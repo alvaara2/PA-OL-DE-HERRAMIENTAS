@@ -43,6 +43,7 @@ interface CatalogViewProps {
   onOpenLabelSheet: (assetsToPrint: PhysicalAsset[]) => void;
   onDispatchAsset: (asset: PhysicalAsset) => void;
   onImportAssets?: (newAssets: PhysicalAsset[]) => void;
+  onOpenBulkDelete?: (selectedIds?: string[]) => void;
 }
 
 export const CatalogView: React.FC<CatalogViewProps> = ({
@@ -52,6 +53,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   onOpenLabelSheet,
   onDispatchAsset,
   onImportAssets,
+  onOpenBulkDelete,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -332,6 +334,16 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             Exportar Excel
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenBulkDelete && onOpenBulkDelete(selectedAssetIds)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition cursor-pointer"
+            title="Abrir Menú de Borrado en General para eliminar herramientas"
+          >
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>Borrado Masivo {selectedAssetIds.length > 0 && `(${selectedAssetIds.length})`}</span>
           </button>
 
           <button
@@ -915,6 +927,47 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Action Bar for Selected Tools */}
+      {selectedAssetIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-950 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center">
+              {selectedAssetIds.length}
+            </span>
+            <span className="text-xs font-bold text-slate-200">Herramientas seleccionadas</span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-800" />
+
+          <button
+            type="button"
+            onClick={() => onOpenLabelSheet(selectedAssetObjects)}
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <Printer className="w-3.5 h-3.5 text-amber-400" />
+            <span>Imprimir QR ({selectedAssetIds.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onOpenBulkDelete && onOpenBulkDelete(selectedAssetIds)}
+            className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Borrar Seleccionadas en Masa</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedAssetIds([])}
+            className="p-1 rounded-lg text-slate-400 hover:text-white transition"
+            title="Deseleccionar todo"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

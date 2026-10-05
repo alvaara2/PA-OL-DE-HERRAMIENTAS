@@ -16,6 +16,7 @@ import { LabelSheetModal } from './components/LabelSheetModal';
 import { QrScannerModal } from './components/QrScannerModal';
 import { ToolSpinLoader } from './components/ToolSpinLoader';
 import { TvAndonLiveView } from './components/TvAndonLiveView';
+import { BulkDeleteModal, BulkDeleteExecutionConfig } from './components/BulkDeleteModal';
 import { 
   INITIAL_ASSETS, 
   INITIAL_TECHNICIANS, 
@@ -236,6 +237,8 @@ export default function App() {
   const [isMainScannerOpen, setIsMainScannerOpen] = useState(false);
   const [preselectedAssetForDispatch, setPreselectedAssetForDispatch] = useState<PhysicalAsset | null>(null);
   const [showDemoLoader, setShowDemoLoader] = useState(false);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleteSelectedAssetIds, setBulkDeleteSelectedAssetIds] = useState<string[]>([]);
 
   // Synchronize with localStorage
   useEffect(() => {
@@ -281,6 +284,14 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.KARDEX, JSON.stringify(kardex));
+      // Real-time sync to backend endpoint for Google Sheets =IMPORTDATA
+      fetch('/api/kardex/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: kardex }),
+      }).catch(() => {
+        // Safe fallback if offline
+      });
     } catch (e) {
       console.warn('Kardex storage error', e);
     }
@@ -751,6 +762,246 @@ export default function App() {
     broadcastRealtimeSync();
   };
 
+  const handleExecuteBulkDelete = (config: BulkDeleteExecutionConfig) => {
+    // 1. Create an automatic safety checkpoint in IndexedDB before executing any bulk deletion
+    handleCreateCheckpoint(
+      `Pre-Borrado: ${config.description}`,
+      `Respaldo automático generado antes de ejecutar: ${config.description}`,
+      'automatico'
+    );
+
+    const nowIso = new Date().toISOString();
+    const newBinItems: RecycleBinItem[] = [];
+    const newKardexItems: KardexEntry[] = [];
+
+    switch (config.target) {
+      case 'selected_assets': {
+        const idsToDelete = new Set(config.selectedAssetIds || []);
+        const toDelete = assets.filter((a) => idsToDelete.has(a.id));
+        if (config.sendToRecycleBin) {
+          toDelete.forEach((asset) => {
+            newBinItems.push({
+              id: `bin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tipo: 'activo',
+              codigoOIdentificador: asset.codigoActivoFisico,
+              nombreODescripcion: asset.descripcion,
+              fechaEliminacion: nowIso,
+              eliminadoPor: activeStorekeeper.nombreCompleto,
+              data: asset,
+            });
+          });
+        }
+        toDelete.forEach((a) => {
+          newKardexItems.push({
+            id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            fecha: nowIso,
+            tipoEvento: 'baja',
+            assetId: a.id,
+            codigoActivoFisico: a.codigoActivoFisico,
+            descripcion: a.descripcion,
+            almaceneroNombre: activeStorekeeper.nombreCompleto,
+            condicion: a.condicionFisica,
+            observaciones: `Borrado en masa (${config.sendToRecycleBin ? 'enviado a papelera' : 'purga definitiva'})`,
+          });
+        });
+        setAssets((prev) => prev.filter((a) => !idsToDelete.has(a.id)));
+        break;
+      }
+
+      case 'assets_baja': {
+        const toDelete = assets.filter(
+          (a) => a.estado === 'baja' || a.condicionFisica === 'fisurado' || a.condicionFisica === 'perdido'
+        );
+        const idsToDelete = new Set(toDelete.map((a) => a.id));
+        if (config.sendToRecycleBin) {
+          toDelete.forEach((asset) => {
+            newBinItems.push({
+              id: `bin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tipo: 'activo',
+              codigoOIdentificador: asset.codigoActivoFisico,
+              nombreODescripcion: asset.descripcion,
+              fechaEliminacion: nowIso,
+              eliminadoPor: activeStorekeeper.nombreCompleto,
+              data: asset,
+            });
+          });
+        }
+        toDelete.forEach((a) => {
+          newKardexItems.push({
+            id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            fecha: nowIso,
+            tipoEvento: 'baja',
+            assetId: a.id,
+            codigoActivoFisico: a.codigoActivoFisico,
+            descripcion: a.descripcion,
+            almaceneroNombre: activeStorekeeper.nombreCompleto,
+            condicion: a.condicionFisica,
+            observaciones: 'Purga masiva de herramientas en baja / dañadas',
+          });
+        });
+        setAssets((prev) => prev.filter((a) => !idsToDelete.has(a.id)));
+        break;
+      }
+
+      case 'assets_disponibles': {
+        const toDelete = assets.filter((a) => a.estado === 'disponible');
+        const idsToDelete = new Set(toDelete.map((a) => a.id));
+        if (config.sendToRecycleBin) {
+          toDelete.forEach((asset) => {
+            newBinItems.push({
+              id: `bin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tipo: 'activo',
+              codigoOIdentificador: asset.codigoActivoFisico,
+              nombreODescripcion: asset.descripcion,
+              fechaEliminacion: nowIso,
+              eliminadoPor: activeStorekeeper.nombreCompleto,
+              data: asset,
+            });
+          });
+        }
+        toDelete.forEach((a) => {
+          newKardexItems.push({
+            id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            fecha: nowIso,
+            tipoEvento: 'baja',
+            assetId: a.id,
+            codigoActivoFisico: a.codigoActivoFisico,
+            descripcion: a.descripcion,
+            almaceneroNombre: activeStorekeeper.nombreCompleto,
+            condicion: a.condicionFisica,
+            observaciones: 'Borrado masivo de herramientas disponibles en pañol',
+          });
+        });
+        setAssets((prev) => prev.filter((a) => !idsToDelete.has(a.id)));
+        break;
+      }
+
+      case 'all_assets': {
+        if (config.sendToRecycleBin) {
+          assets.forEach((asset) => {
+            newBinItems.push({
+              id: `bin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tipo: 'activo',
+              codigoOIdentificador: asset.codigoActivoFisico,
+              nombreODescripcion: asset.descripcion,
+              fechaEliminacion: nowIso,
+              eliminadoPor: activeStorekeeper.nombreCompleto,
+              data: asset,
+            });
+          });
+        }
+        newKardexItems.push({
+          id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          fecha: nowIso,
+          tipoEvento: 'baja',
+          assetId: 'TODOS',
+          codigoActivoFisico: 'CATALOGO_COMPLETO',
+          descripcion: `Vaciado masivo del catálogo (${assets.length} activos)`,
+          almaceneroNombre: activeStorekeeper.nombreCompleto,
+          condicion: 'operativo',
+          observaciones: 'Vaciado completo del inventario de activos físicos',
+        });
+        setAssets([]);
+        break;
+      }
+
+      case 'technicians_no_loans': {
+        const activeTechDnis = new Set(
+          dispatches.filter((d) => d.estado !== 'completado').map((d) => d.tecnicoDni)
+        );
+        const toDelete = technicians.filter((t) => !activeTechDnis.has(t.dni));
+        const idsToDelete = new Set(toDelete.map((t) => t.id));
+        if (config.sendToRecycleBin) {
+          toDelete.forEach((tech) => {
+            newBinItems.push({
+              id: `bin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tipo: 'tecnico',
+              codigoOIdentificador: tech.dni,
+              nombreODescripcion: `${tech.nombreCompleto} (${tech.cargo})`,
+              fechaEliminacion: nowIso,
+              eliminadoPor: activeStorekeeper.nombreCompleto,
+              data: tech,
+            });
+          });
+        }
+        setTechnicians((prev) => prev.filter((t) => !idsToDelete.has(t.id)));
+        break;
+      }
+
+      case 'all_technicians': {
+        if (config.sendToRecycleBin) {
+          technicians.forEach((tech) => {
+            newBinItems.push({
+              id: `bin-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              tipo: 'tecnico',
+              codigoOIdentificador: tech.dni,
+              nombreODescripcion: `${tech.nombreCompleto} (${tech.cargo})`,
+              fechaEliminacion: nowIso,
+              eliminadoPor: activeStorekeeper.nombreCompleto,
+              data: tech,
+            });
+          });
+        }
+        setTechnicians([]);
+        break;
+      }
+
+      case 'completed_dispatches': {
+        setDispatches((prev) => prev.filter((d) => d.estado !== 'completado'));
+        break;
+      }
+
+      case 'old_completed_dispatches': {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        setDispatches((prev) =>
+          prev.filter((d) => !(d.estado === 'completado' && d.fechaPrestamo < thirtyDaysAgo))
+        );
+        break;
+      }
+
+      case 'all_dispatches': {
+        setDispatches([]);
+        break;
+      }
+
+      case 'old_kardex': {
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        setKardex((prev) => prev.filter((k) => k.fecha >= thirtyDaysAgo));
+        break;
+      }
+
+      case 'all_kardex': {
+        setKardex([]);
+        break;
+      }
+
+      case 'empty_recycle_bin': {
+        setRecycleBin([]);
+        break;
+      }
+
+      case 'factory_reset': {
+        setAssets([]);
+        setTechnicians([]);
+        setDispatches([]);
+        setKardex([]);
+        setRecycleBin([]);
+        break;
+      }
+    }
+
+    if (newBinItems.length > 0) {
+      setRecycleBin((prev) => [...newBinItems, ...prev]);
+    }
+
+    if (newKardexItems.length > 0 && config.target !== 'all_kardex') {
+      setKardex((prev) => [...newKardexItems, ...prev]);
+    }
+
+    broadcastRealtimeSync();
+    alert(`✅ Operación completada: ${config.description}. Se generó un punto de restauración preventivo en IndexedDB.`);
+  };
+
   const handleImportAssets = (newAssets: PhysicalAsset[]) => {
     // Generate Kardex entries for all imported assets
     const nowIso = new Date().toISOString();
@@ -1028,6 +1279,10 @@ export default function App() {
         }}
         onOpenScanner={() => setIsMainScannerOpen(true)}
         onOpenCheckpoints={() => setIsCheckpointsOpen(true)}
+        onOpenBulkDelete={() => {
+          setBulkDeleteSelectedAssetIds([]);
+          setIsBulkDeleteModalOpen(true);
+        }}
         syncState={syncState}
         onManualSync={handleManualSync}
       />
@@ -1146,6 +1401,10 @@ export default function App() {
             onUpdateTechnician={handleUpdateTechnician}
             onDeleteTechnician={handleDeleteTechnician}
             onBatchImportTechnicians={handleBatchImportTechnicians}
+            onOpenBulkDelete={() => {
+              setBulkDeleteSelectedAssetIds([]);
+              setIsBulkDeleteModalOpen(true);
+            }}
           />
         )}
 
@@ -1157,6 +1416,16 @@ export default function App() {
           />
         )}
 
+        {currentTab === 'kardex' && (
+          <KardexView
+            entries={kardex}
+            onOpenBulkDelete={() => {
+              setBulkDeleteSelectedAssetIds([]);
+              setIsBulkDeleteModalOpen(true);
+            }}
+          />
+        )}
+
         {currentTab === 'catalog' && (
           <CatalogView
             assets={assets}
@@ -1165,6 +1434,10 @@ export default function App() {
             onOpenLabelSheet={handleOpenLabelSheet}
             onDispatchAsset={handleDispatchAsset}
             onImportAssets={handleImportAssets}
+            onOpenBulkDelete={(ids) => {
+              setBulkDeleteSelectedAssetIds(ids || []);
+              setIsBulkDeleteModalOpen(true);
+            }}
           />
         )}
 
@@ -1270,6 +1543,23 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Menú Global de Borrado en General & Purga Masiva */}
+      <BulkDeleteModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => {
+          setIsBulkDeleteModalOpen(false);
+          setBulkDeleteSelectedAssetIds([]);
+        }}
+        assets={assets}
+        technicians={technicians}
+        dispatches={dispatches}
+        kardex={kardex}
+        recycleBin={recycleBin}
+        activeStorekeeper={activeStorekeeper}
+        selectedAssetIds={bulkDeleteSelectedAssetIds}
+        onExecuteBulkDelete={handleExecuteBulkDelete}
+      />
 
       {/* Footer */}
       <footer className="no-print mt-auto border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">

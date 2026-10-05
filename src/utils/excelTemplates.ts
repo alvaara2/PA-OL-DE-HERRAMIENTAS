@@ -158,6 +158,9 @@ export function exportKardexToExcel(kardexEntries: KardexEntry[]) {
   });
 
   const ws = XLSX.utils.json_to_sheet(formattedData);
+  if (ws['!ref']) {
+    ws['!autofilter'] = { ref: ws['!ref'] };
+  }
   ws['!cols'] = [
     { wch: 6 },  // #
     { wch: 20 }, // Fecha
