@@ -637,6 +637,11 @@ export const WorkshopDashboardView: React.FC<WorkshopDashboardViewProps> = ({
                           <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
                             {asset.codigoActivoFisico}
                           </span>
+                          {asset.dniNumerico && (
+                            <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                              DNI {asset.dniNumerico}
+                            </span>
+                          )}
                           <span className="text-[11px] text-slate-400 font-medium">
                             {asset.marca} {asset.modelo ? `• ${asset.modelo}` : ''}
                           </span>

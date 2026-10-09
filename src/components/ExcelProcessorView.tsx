@@ -314,11 +314,20 @@ export const ExcelProcessorView: React.FC<ExcelProcessorViewProps> = ({
       onBeforeImport();
     }
 
+    const existingDnis = new Set(existingAssets.map((a) => a.dniNumerico).filter(Boolean));
     const newAssets: PhysicalAsset[] = selected.map((r) => {
       const autoPhoto = getAutoReferenceImage(r.descripcion, r.marca);
+      let toolDni = '';
+      do {
+        toolDni = Math.floor(10000000 + Math.random() * 90000000).toString();
+      } while (existingDnis.has(toolDni));
+      existingDnis.add(toolDni);
+
       return {
         id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         codigoActivoFisico: r.codigoGenerado,
+        codigoMnemotecnico: r.codigoGenerado,
+        dniNumerico: toolDni,
         descripcion: r.descripcion,
         categoria: r.categoria,
         familia: r.categoria.toUpperCase(),
@@ -336,7 +345,7 @@ export const ExcelProcessorView: React.FC<ExcelProcessorViewProps> = ({
     });
 
     onImportAssets(newAssets);
-    alert(`¡Éxito! Se han incorporado ${newAssets.length} activos físicos codificados al inventario de pañol.`);
+    alert(`¡Éxito! Se han incorporado ${newAssets.length} activos físicos con doble codificación (Texto + DNI 8 dígitos) al inventario de pañol.`);
     setParsedRows([]);
     setFileName(null);
   };

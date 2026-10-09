@@ -47,6 +47,7 @@ import {
   parseFullBackupJSON 
 } from './utils/indexedDBStorage';
 import { dispatchKardexEntriesToAppsScript } from './utils/googleSheetsSync';
+import { generateRandomToolDni } from './utils/assetCoder';
 import { AlertOctagon, RotateCw, Lock, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -83,11 +84,38 @@ export default function App() {
     return INITIAL_STOREKEEPERS[0].id;
   });
 
-  // Assets
+  // Assets with dual coding (código físico texto + DNI 8 dígitos)
   const [assets, setAssets] = useState<PhysicalAsset[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ASSETS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: PhysicalAsset[] = JSON.parse(saved);
+        const usedDnis = new Set(parsed.map((a) => a.dniNumerico).filter(Boolean));
+        let modified = false;
+        const enriched = parsed.map((asset) => {
+          if (!asset.dniNumerico || !/^\d{8}$/.test(String(asset.dniNumerico).trim())) {
+            modified = true;
+            let newDni = '';
+            do {
+              newDni = Math.floor(10000000 + Math.random() * 90000000).toString();
+            } while (usedDnis.has(newDni));
+            usedDnis.add(newDni);
+            return {
+              ...asset,
+              codigoMnemotecnico: asset.codigoMnemotecnico || asset.codigoActivoFisico,
+              dniNumerico: newDni,
+            };
+          }
+          return {
+            ...asset,
+            codigoMnemotecnico: asset.codigoMnemotecnico || asset.codigoActivoFisico,
+          };
+        });
+        if (modified) {
+          localStorage.setItem(STORAGE_KEYS.ASSETS, JSON.stringify(enriched));
+        }
+        return enriched;
+      }
     } catch (e) {
       console.warn('Could not load assets from storage', e);
     }
@@ -754,27 +782,37 @@ export default function App() {
 
   // Asset actions
   const handleSaveAsset = (asset: PhysicalAsset) => {
+    // Ensure 8-digit numeric DNI is present and unique
+    const assetToSave = { ...asset };
+    if (!assetToSave.dniNumerico || !/^\d{8}$/.test(String(assetToSave.dniNumerico).trim())) {
+      const existingDnis = assets.filter((a) => a.id !== assetToSave.id).map((a) => a.dniNumerico);
+      assetToSave.dniNumerico = generateRandomToolDni(existingDnis);
+    }
+    if (!assetToSave.codigoMnemotecnico) {
+      assetToSave.codigoMnemotecnico = assetToSave.codigoActivoFisico;
+    }
+
     setAssets((prev) => {
-      const exists = prev.some((a) => a.id === asset.id);
+      const exists = prev.some((a) => a.id === assetToSave.id);
       if (exists) {
-        return prev.map((a) => (a.id === asset.id ? asset : a));
+        return prev.map((a) => (a.id === assetToSave.id ? assetToSave : a));
       }
       // New asset: append Kardex entrada event
       const kdx: KardexEntry = {
         id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         fecha: new Date().toISOString(),
         tipoEvento: 'entrada_inicial',
-        assetId: asset.id,
-        codigoActivoFisico: asset.codigoActivoFisico,
-        descripcion: asset.descripcion,
+        assetId: assetToSave.id,
+        codigoActivoFisico: assetToSave.codigoActivoFisico,
+        descripcion: assetToSave.descripcion,
         almaceneroNombre: activeStorekeeper.nombreCompleto,
-        condicion: asset.condicionFisica,
+        condicion: assetToSave.condicionFisica,
         observaciones: 'Ingreso manual a inventario de pañol',
       };
       setKardex((k) => [kdx, ...k]);
       dispatchKardexEntriesToAppsScript([kdx], activeStorekeeper.nombreCompleto);
 
-      return [asset, ...prev];
+      return [assetToSave, ...prev];
     });
     broadcastRealtimeSync();
   };
@@ -1054,9 +1092,26 @@ export default function App() {
   };
 
   const handleImportAssets = (newAssets: PhysicalAsset[]) => {
+    // Ensure all imported assets have dual coding (text code + 8-digit unique DNI)
+    const existingDnis = new Set(assets.map((a) => a.dniNumerico).filter(Boolean));
+    const finalizedAssets = newAssets.map((a) => {
+      let dni = a.dniNumerico;
+      if (!dni || !/^\d{8}$/.test(String(dni).trim()) || existingDnis.has(dni)) {
+        do {
+          dni = Math.floor(10000000 + Math.random() * 90000000).toString();
+        } while (existingDnis.has(dni));
+        existingDnis.add(dni);
+      }
+      return {
+        ...a,
+        codigoMnemotecnico: a.codigoMnemotecnico || a.codigoActivoFisico,
+        dniNumerico: dni,
+      };
+    });
+
     // Generate Kardex entries for all imported assets
     const nowIso = new Date().toISOString();
-    const newKardex: KardexEntry[] = newAssets.map((a) => ({
+    const newKardex: KardexEntry[] = finalizedAssets.map((a) => ({
       id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       fecha: nowIso,
       tipoEvento: 'entrada_inicial',
@@ -1069,7 +1124,7 @@ export default function App() {
     }));
     setKardex((prev) => [...newKardex, ...prev]);
 
-    setAssets((prev) => [...newAssets, ...prev]);
+    setAssets((prev) => [...finalizedAssets, ...prev]);
     setCurrentTab('catalog');
     broadcastRealtimeSync();
   };

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Search, 
   Plus, 
@@ -19,7 +19,12 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
-  X
+  X,
+  Hash,
+  Binary,
+  Eye,
+  Copy,
+  Check
 } from 'lucide-react';
 import { PhysicalAsset, AssetCategory, AssetStatus } from '../types/workshop';
 import { AssetFormModal } from './AssetFormModal';
@@ -29,12 +34,14 @@ import * as XLSX from 'xlsx';
 import { downloadToolsTemplate } from '../utils/excelTemplates';
 import { 
   generateUniquePhysicalCode, 
+  generateRandomToolDni,
   detectCategory, 
   extractDrive, 
   extractMeasurement, 
   suggestLocation 
 } from '../utils/assetCoder';
 import { getAutoReferenceImage } from '../utils/imageCatalog';
+import { getCachedQrDataUrl } from '../utils/qrHelper';
 
 interface CatalogViewProps {
   assets: PhysicalAsset[];
@@ -67,6 +74,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [assetToEdit, setAssetToEdit] = useState<PhysicalAsset | null>(null);
 
+  // Ficha del Equipo (Modal de Detalle Completo)
+  const [selectedDetailAsset, setSelectedDetailAsset] = useState<PhysicalAsset | null>(null);
+  const [detailQrUrl, setDetailQrUrl] = useState<string>('');
+  const [copiedCodeToast, setCopiedCodeToast] = useState<string | null>(null);
+
   // Official Certificate Viewer modal
   const [selectedCertificateAsset, setSelectedCertificateAsset] = useState<PhysicalAsset | null>(null);
 
@@ -76,17 +88,36 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
   const [previewTools, setPreviewTools] = useState<PhysicalAsset[]>([]);
   const [toolsToastMessage, setToolsToastMessage] = useState<string | null>(null);
 
-  // Filter logic
+  // Generate QR for detail modal when open
+  useEffect(() => {
+    if (selectedDetailAsset) {
+      getCachedQrDataUrl(selectedDetailAsset.codigoActivoFisico).then((url) => {
+        setDetailQrUrl(url);
+      });
+    } else {
+      setDetailQrUrl('');
+    }
+  }, [selectedDetailAsset]);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCodeToast(`Copiado: ${label} (${text})`);
+    setTimeout(() => setCopiedCodeToast(null), 2500);
+  };
+
+  // Filter logic: finds tool by text code OR by 8-digit DNI number or description/location
   const filteredAssets = assets.filter((asset) => {
     if (categoryFilter !== 'all' && asset.categoria !== categoryFilter) return false;
     if (statusFilter !== 'all' && asset.estado !== statusFilter) return false;
     if (searchTerm) {
-      const q = searchTerm.toLowerCase();
+      const q = searchTerm.toLowerCase().trim();
       const matchCode = asset.codigoActivoFisico.toLowerCase().includes(q);
+      const matchDni = asset.dniNumerico ? asset.dniNumerico.toLowerCase().includes(q) : false;
+      const matchMnem = asset.codigoMnemotecnico ? asset.codigoMnemotecnico.toLowerCase().includes(q) : false;
       const matchDesc = asset.descripcion.toLowerCase().includes(q);
       const matchLoc = asset.ubicacion.toLowerCase().includes(q);
       const matchBrand = asset.marca.toLowerCase().includes(q);
-      return matchCode || matchDesc || matchLoc || matchBrand;
+      return matchCode || matchDni || matchMnem || matchDesc || matchLoc || matchBrand;
     }
     return true;
   });
@@ -105,11 +136,12 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
     }
   };
 
-  // Export current catalog view to Excel
+  // Export current catalog view to Excel with dual codes
   const handleExportCatalogExcel = () => {
     const data = filteredAssets.map((a, idx) => ({
       '#': idx + 1,
-      'CODIGO_ACTIVO_FISICO': a.codigoActivoFisico,
+      'CODIGO_TEXTO': a.codigoActivoFisico,
+      'DNI_NUMERICO_8_DIGITOS': a.dniNumerico || '-',
       'DESCRIPCION': a.descripcion,
       'CATEGORIA': a.categoria,
       'MARCA': a.marca,
@@ -161,6 +193,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         const existingCodes = new Set(assets.map((a) => a.codigoActivoFisico.toUpperCase().trim()));
         const parsedList: PhysicalAsset[] = [];
         const usedCodes = [...assets.map((a) => a.codigoActivoFisico)];
+        const existingDnis = new Set(assets.map((a) => a.dniNumerico).filter(Boolean));
 
         dataRows.forEach((row, idx) => {
           const rowArr = (row || []) as unknown[];
@@ -205,6 +238,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           }
           usedCodes.push(rawCod);
 
+          // Auto-generate unique 8-digit DNI
+          let toolDni = '';
+          do {
+            toolDni = Math.floor(10000000 + Math.random() * 90000000).toString();
+          } while (existingDnis.has(toolDni));
+          existingDnis.add(toolDni);
+
           const finalUbic = rawUbic || suggestLocation(finalCat, isImpact);
 
           const calData = reqCal ? {
@@ -217,6 +257,8 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           parsedList.push({
             id: `asset-imp-${Date.now()}-${idx}`,
             codigoActivoFisico: rawCod,
+            codigoMnemotecnico: rawCod,
+            dniNumerico: toolDni,
             descripcion: rawNombre,
             categoria: finalCat,
             familia: finalCat.toUpperCase(),
@@ -371,13 +413,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search Bar */}
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 max-w-lg">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por placa física, descripción, medida o estante..."
+              placeholder="Buscar por código texto (PIST-ED-001), DNI 8 dígitos (84920173), descripción..."
               className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white"
             />
           </div>
@@ -482,7 +524,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
               >
                 <div>
                   {/* Photo Header */}
-                  <div className="relative h-44 bg-slate-100 overflow-hidden">
+                  <div 
+                    onClick={() => setSelectedDetailAsset(asset)}
+                    className="relative h-44 bg-slate-100 overflow-hidden cursor-pointer"
+                    title="Click para ver Ficha Completa del Equipo"
+                  >
                     {asset.fotoUrl ? (
                       <img
                         src={asset.fotoUrl}
@@ -495,10 +541,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       </div>
                     )}
 
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-transparent pointer-events-none" />
 
                     {/* Checkbox for label printing */}
-                    <div className="absolute top-2.5 left-2.5 z-10">
+                    <div 
+                      className="absolute top-2.5 left-2.5 z-10"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -524,15 +573,32 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       )}
                     </div>
 
-                    {/* Physical Code Strip */}
-                    <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between">
-                      <span className="font-mono text-xs font-black bg-white/95 text-slate-900 px-2 py-0.5 rounded border border-slate-200 shadow-sm">
-                        {asset.codigoActivoFisico}
-                      </span>
+                    {/* Dual Physical Code Strip on Photo Overlay */}
+                    <div 
+                      className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex flex-wrap items-center gap-1 overflow-hidden">
+                        <span 
+                          className="font-mono text-xs font-black bg-white/95 text-slate-900 px-2 py-0.5 rounded border border-slate-200 shadow-sm"
+                          title="1° Código en Texto (Mnemotécnico)"
+                        >
+                          {asset.codigoActivoFisico}
+                        </span>
+                        {asset.dniNumerico && (
+                          <span 
+                            className="font-mono text-[11px] font-black bg-blue-600 text-white px-2 py-0.5 rounded shadow-sm flex items-center gap-0.5"
+                            title="2° DNI Numérico de 8 Dígitos"
+                          >
+                            <Hash className="w-3 h-3 text-blue-200" />
+                            {asset.dniNumerico}
+                          </span>
+                        )}
+                      </div>
 
                       <button
                         onClick={() => onOpenLabelSheet([asset])}
-                        className="p-1.5 rounded-lg bg-white/95 text-slate-700 hover:text-slate-950 border border-slate-200 shadow-sm transition"
+                        className="p-1.5 rounded-lg bg-white/95 text-slate-700 hover:text-slate-950 border border-slate-200 shadow-sm transition shrink-0"
                         title="Imprimir Sticker QR"
                       >
                         <QrCode className="w-3.5 h-3.5" />
@@ -541,8 +607,28 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                   </div>
 
                   {/* Body Content */}
-                  <div className="p-4 space-y-2">
-                    <h3 className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">
+                  <div className="p-4 space-y-2.5">
+                    {/* Double Code Card Badge */}
+                    <div className="bg-slate-50 border border-slate-200/90 rounded-xl p-2 flex items-center justify-between text-[11px] font-mono">
+                      <div className="flex items-center gap-1 truncate mr-1">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Texto:</span>
+                        <span className="font-bold text-amber-950 bg-amber-100/80 border border-amber-300 px-1.5 py-0.5 rounded text-[11px] truncate">
+                          {asset.codigoActivoFisico}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">DNI:</span>
+                        <span className="font-bold text-blue-900 bg-blue-100/80 border border-blue-300 px-1.5 py-0.5 rounded text-[11px]">
+                          {asset.dniNumerico || '--------'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <h3 
+                      onClick={() => setSelectedDetailAsset(asset)}
+                      className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug cursor-pointer hover:text-blue-700 transition"
+                      title="Ver Ficha Técnica del Equipo"
+                    >
                       {asset.descripcion}
                     </h3>
 
@@ -589,7 +675,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                           className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
                         >
                           <FileText className="w-3.5 h-3.5" />
-                          <span>📄 Ver Certificado Oficial</span>
+                          <span>📄 Certificado</span>
                         </button>
                       </div>
                     )}
@@ -599,6 +685,14 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                 {/* Footer Actions */}
                 <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setSelectedDetailAsset(asset)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-blue-700 hover:bg-blue-50 font-bold text-[11px] transition"
+                      title="Ver Ficha Técnica Completa"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Ficha</span>
+                    </button>
                     <button
                       onClick={() => {
                         setAssetToEdit(asset);
@@ -629,7 +723,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                         title="EQUIPO BLOQUEADO: Requiere calibración antes de salir a campo"
                       >
                         <Lock className="w-3 h-3 text-rose-600 shrink-0" />
-                        <span>BLOQUEADO: Calibración vencida</span>
+                        <span>BLOQUEADO</span>
                       </span>
                     ) : (
                       <button
@@ -664,7 +758,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                       className="rounded border-slate-300 text-amber-500 focus:ring-amber-400"
                     />
                   </th>
-                  <th className="p-3">Código Placa Físico</th>
+                  <th className="p-3">Código Texto / DNI 8 Dígitos</th>
                   <th className="p-3">Descripción Técnica</th>
                   <th className="p-3">Marca / Medida</th>
                   <th className="p-3">Ubicación Tablero</th>
@@ -687,13 +781,26 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                         className="rounded border-slate-300 text-amber-500 focus:ring-amber-400"
                       />
                     </td>
-                    <td className="p-3 font-mono font-bold text-slate-900">
-                      <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200">
-                        {asset.codigoActivoFisico}
-                      </span>
+                    <td className="p-3 font-mono">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200 font-black text-xs">
+                          {asset.codigoActivoFisico}
+                        </span>
+                        {asset.dniNumerico && (
+                          <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-black text-[11px] inline-flex items-center gap-1">
+                            <Hash className="w-3 h-3 text-blue-600" /> DNI {asset.dniNumerico}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 text-slate-800 font-semibold">
-                      <div>{asset.descripcion}</div>
+                      <div 
+                        onClick={() => setSelectedDetailAsset(asset)}
+                        className="cursor-pointer hover:text-blue-700 transition"
+                        title="Ver Ficha Técnica"
+                      >
+                        {asset.descripcion}
+                      </div>
                       {asset.calibracion?.requiereCalibracion && (
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           {calEval.estadoMetrologico === 'vigente' && (
@@ -744,6 +851,13 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                     </td>
                     <td className="p-3 text-right">
                       <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={() => setSelectedDetailAsset(asset)}
+                          className="p-1.5 rounded hover:bg-blue-50 text-blue-600"
+                          title="Ver Ficha del Equipo"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => onOpenLabelSheet([asset])}
                           className="p-1.5 rounded hover:bg-slate-100 text-slate-600"
@@ -799,6 +913,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
         }}
         assetToEdit={assetToEdit}
         existingCodes={assets.map((a) => a.codigoActivoFisico)}
+        existingDnis={assets.map((a) => a.dniNumerico)}
       />
 
       {/* Official Certificate PDF Viewer Modal */}
@@ -819,6 +934,325 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
           setSelectedCertificateAsset(updated);
         }}
       />
+
+      {/* Ficha Oficial del Equipo / Activo Físico Modal (Doble Codificación) */}
+      {selectedDetailAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/65 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-900">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-300 flex items-center justify-center text-amber-700">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Ficha Técnica del Equipo / Activo
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Doble codificación física oficial, ubicación en sombra y estado de trazabilidad
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDetailAsset(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Toast Copiado */}
+            {copiedCodeToast && (
+              <div className="bg-emerald-600 text-white text-xs font-bold px-4 py-2 text-center animate-in fade-in">
+                ✓ {copiedCodeToast}
+              </div>
+            )}
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-5 text-xs">
+              {/* DOBLE CODIFICACIÓN BANNER DESTACADO */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-50 via-slate-50 to-blue-50 border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <Binary className="w-4 h-4 text-amber-600" />
+                    Doble Codificación Registrada en el Sistema
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    ✓ Activo y Buscable
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* 1° Código en Texto */}
+                  <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-2xs flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-amber-800 block mb-1">
+                        1° Código en Texto (Mnemotécnico):
+                      </span>
+                      <div className="font-mono text-base sm:text-lg font-black text-slate-900 break-all">
+                        {selectedDetailAsset.codigoActivoFisico}
+                      </div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 font-medium">Placa física grabada</span>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(selectedDetailAsset.codigoActivoFisico, 'Código en Texto')}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded text-[10px] transition cursor-pointer border border-amber-200"
+                      >
+                        <Copy className="w-3 h-3" /> Copiar
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2° DNI Numérico 8 Dígitos */}
+                  <div className="bg-white p-3.5 rounded-xl border border-blue-200 shadow-2xs flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-blue-800 block mb-1 flex items-center gap-1">
+                        <Hash className="w-3.5 h-3.5 text-blue-600" /> 2° DNI Numérico (8 Dígitos):
+                      </span>
+                      <div className="font-mono text-base sm:text-lg font-black text-blue-900 tracking-wider">
+                        {selectedDetailAsset.dniNumerico || 'Sin DNI asignado'}
+                      </div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 font-medium">Identificador aleatorio único</span>
+                      {selectedDetailAsset.dniNumerico && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(selectedDetailAsset.dniNumerico!, 'DNI Numérico')}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold rounded text-[10px] transition cursor-pointer border border-blue-200"
+                        >
+                          <Copy className="w-3 h-3" /> Copiar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-500 text-center">
+                  💡 <em>El buscador principal del catálogo encuentra esta herramienta escribiendo su código en texto (<span className="font-mono font-bold text-slate-700">{selectedDetailAsset.codigoActivoFisico}</span>) o su DNI de 8 dígitos (<span className="font-mono font-bold text-blue-700">{selectedDetailAsset.dniNumerico}</span>).</em>
+                </p>
+              </div>
+
+              {/* Foto & QR Strip */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2 h-44 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 relative shadow-2xs">
+                  {selectedDetailAsset.fotoUrl ? (
+                    <img
+                      src={selectedDetailAsset.fotoUrl}
+                      alt={selectedDetailAsset.descripcion}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-400">
+                      <Wrench className="w-12 h-12" />
+                    </div>
+                  )}
+                  <div className="absolute top-2.5 right-2.5">
+                    <span
+                      className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow-sm ${
+                        selectedDetailAsset.estado === 'disponible'
+                          ? 'bg-emerald-500 text-white'
+                          : selectedDetailAsset.estado === 'prestado'
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-rose-600 text-white'
+                      }`}
+                    >
+                      {selectedDetailAsset.estado}
+                    </span>
+                  </div>
+                </div>
+
+                {/* QR Preview Card */}
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col items-center justify-center text-center">
+                  <div className="w-24 h-24 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center">
+                    {detailQrUrl ? (
+                      <img src={detailQrUrl} alt="QR" className="w-full h-full object-contain" />
+                    ) : (
+                      <QrCode className="w-8 h-8 text-slate-300" />
+                    )}
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-slate-700 mt-2 truncate max-w-[140px]">
+                    {selectedDetailAsset.codigoActivoFisico}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenLabelSheet([selectedDetailAsset])}
+                    className="mt-1 text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1"
+                  >
+                    <Printer className="w-3 h-3" /> Imprimir Sticker
+                  </button>
+                </div>
+              </div>
+
+              {/* Technical Description */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Descripción Técnica Completa:
+                </span>
+                <p className="text-sm font-black text-slate-900 leading-snug">
+                  {selectedDetailAsset.descripcion}
+                </p>
+              </div>
+
+              {/* Technical Specs Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Marca</span>
+                  <span className="font-bold text-slate-900 text-xs">{selectedDetailAsset.marca || 'GENÉRICO'}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Categoría</span>
+                  <span className="font-bold text-slate-900 text-xs uppercase">{selectedDetailAsset.categoria}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Medida / Rango</span>
+                  <span className="font-mono font-bold text-slate-900 text-xs">{selectedDetailAsset.medida || '-'}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Encastre</span>
+                  <span className="font-mono font-bold text-slate-900 text-xs">
+                    {selectedDetailAsset.encastre ? `${selectedDetailAsset.encastre}"` : '-'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Tipo Impacto</span>
+                  <span className="font-bold text-slate-900 text-xs">
+                    {selectedDetailAsset.esImpacto ? '★ De Impacto' : 'Estándar'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">N° Serie Fábrica</span>
+                  <span className="font-mono font-bold text-slate-900 text-xs truncate block">
+                    {selectedDetailAsset.numeroSerie || 'S/N grabado'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Condición Física</span>
+                  <span className="font-bold text-slate-900 text-xs uppercase">{selectedDetailAsset.condicionFisica}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Fecha Alta</span>
+                  <span className="font-mono text-slate-900 text-xs">{selectedDetailAsset.fechaAlta}</span>
+                </div>
+              </div>
+
+              {/* Ubicación en Tablero de Sombra */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center gap-2.5">
+                <MapPin className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Ubicación Asignada en Pañol / Tablero:</span>
+                  <span className="font-bold text-slate-900 text-xs">{selectedDetailAsset.ubicacion}</span>
+                </div>
+              </div>
+
+              {/* Metrología si aplica */}
+              {selectedDetailAsset.calibracion?.requiereCalibracion && (
+                <div className="p-4 bg-amber-50/70 rounded-2xl border border-amber-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-amber-900 text-xs flex items-center gap-1.5 uppercase">
+                      <Award className="w-4 h-4 text-amber-600" />
+                      Control Metrológico ISO / Calibración
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCertificateAsset(selectedDetailAsset)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-xs"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Ver Certificado PDF Oficial
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block">N° Certificado:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {selectedDetailAsset.calibracion.numeroCertificado || 'Pendiente'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Laboratorio:</span>
+                      <span className="font-bold text-slate-900 truncate block">
+                        {selectedDetailAsset.calibracion.entidadCertificadora || 'INACAL'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Fecha Vencimiento:</span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {selectedDetailAsset.calibracion.fechaVencimiento || 'No registrada'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  const asset = selectedDetailAsset;
+                  setSelectedDetailAsset(null);
+                  setAssetToEdit(asset);
+                  setIsFormOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 transition"
+              >
+                <Edit3 className="w-4 h-4 text-slate-600" />
+                Editar Ficha
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenLabelSheet([selectedDetailAsset]);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold border border-slate-200 transition"
+                >
+                  <Printer className="w-4 h-4 text-amber-600" />
+                  Imprimir Sticker
+                </button>
+
+                {selectedDetailAsset.estado === 'disponible' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const asset = selectedDetailAsset;
+                      setSelectedDetailAsset(null);
+                      onDispatchAsset(asset);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-xs transition"
+                  >
+                    Despachar a Campo <ArrowUpRight className="w-4 h-4" />
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailAsset(null)}
+                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 font-bold"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Vista Previa de Importación de Herramientas desde Excel */}
       {isToolsImportModalOpen && (

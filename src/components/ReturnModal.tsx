@@ -71,14 +71,21 @@ export const ReturnModal: React.FC<ReturnModalProps> = ({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  // Quick mark by scanning QR
+  // Quick mark by scanning QR or typing Text Code / 8-digit DNI
   const handleQrScanReturn = (code: string) => {
-    const matchedItem = dispatch.items.find(
-      (it) => it.codigoActivoFisico.toUpperCase() === code.toUpperCase()
-    );
+    const cleanCode = code.trim().toUpperCase();
+    const matchedItem = dispatch.items.find((it) => {
+      const asset = allAssets.find((a) => a.id === it.assetId);
+      return (
+        it.codigoActivoFisico.toUpperCase() === cleanCode ||
+        (asset?.dniNumerico && asset.dniNumerico.toUpperCase() === cleanCode) ||
+        (asset?.codigoMnemotecnico && asset.codigoMnemotecnico.toUpperCase() === cleanCode)
+      );
+    });
+
     if (matchedItem) {
       setItemReturnedStatus((prev) => ({ ...prev, [matchedItem.assetId]: true }));
-      setFeedbackMsg(`✓ Pieza física [${code}] verificada y marcada para retorno.`);
+      setFeedbackMsg(`✓ Pieza física [${matchedItem.codigoActivoFisico}] verificada y marcada para retorno.`);
       setTimeout(() => setFeedbackMsg(null), 4000);
     } else {
       setFeedbackMsg(`⚠️ La pieza [${code}] no pertenece a este vale (${dispatch.codigoVale}).`);
@@ -211,12 +218,23 @@ export const ReturnModal: React.FC<ReturnModalProps> = ({
                             id={`ret-${item.assetId}`}
                           />
                           <div>
-                            <label
-                              htmlFor={`ret-${item.assetId}`}
-                              className="font-mono text-xs font-black text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 cursor-pointer"
-                            >
-                              {item.codigoActivoFisico}
-                            </label>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <label
+                                htmlFor={`ret-${item.assetId}`}
+                                className="font-mono text-xs font-black text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 cursor-pointer"
+                              >
+                                {item.codigoActivoFisico}
+                              </label>
+                              {(() => {
+                                const matchedAsset = allAssets.find((a) => a.id === item.assetId);
+                                if (!matchedAsset?.dniNumerico) return null;
+                                return (
+                                  <span className="font-mono text-[11px] font-bold text-blue-900 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                    DNI {matchedAsset.dniNumerico}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                             <p className="text-xs font-bold text-slate-900 mt-1">
                               {item.descripcion}
                             </p>

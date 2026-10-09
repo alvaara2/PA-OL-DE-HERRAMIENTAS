@@ -571,9 +571,16 @@ export const TvAndonLiveView: React.FC<TvAndonLiveViewProps> = ({
                         )}
                       </div>
                       <div className="overflow-hidden flex-1">
-                        <span className="font-mono font-black text-sm text-amber-400 tracking-wider block">
-                          {firstItem?.codigoActivoFisico || 'ACTIVO'}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-black text-sm text-amber-400 tracking-wider">
+                            {firstItem?.codigoActivoFisico || 'ACTIVO'}
+                          </span>
+                          {matchedAsset?.dniNumerico && (
+                            <span className="font-mono font-bold text-[11px] bg-blue-600/80 text-white px-1.5 py-0.5 rounded border border-blue-400/50">
+                              DNI {matchedAsset.dniNumerico}
+                            </span>
+                          )}
+                        </div>
                         <h3 className="text-base font-bold text-white truncate" title={firstItem?.descripcion}>
                           {firstItem?.descripcion || 'Herramienta / Dado'}
                         </h3>

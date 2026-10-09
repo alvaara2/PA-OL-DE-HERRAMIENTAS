@@ -10,11 +10,15 @@ import {
   Upload,
   FileText,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Hash,
+  RotateCw,
+  Binary
 } from 'lucide-react';
 import { PhysicalAsset, AssetCategory, AssetCondition, AssetStatus, CalibrationData } from '../types/workshop';
 import { 
   generateUniquePhysicalCode, 
+  generateRandomToolDni,
   detectCategory, 
   extractDrive, 
   extractMeasurement, 
@@ -28,6 +32,7 @@ interface AssetFormModalProps {
   onSave: (asset: PhysicalAsset) => void;
   assetToEdit?: PhysicalAsset | null;
   existingCodes: string[];
+  existingDnis?: (string | undefined)[];
 }
 
 export const AssetFormModal: React.FC<AssetFormModalProps> = ({
@@ -36,6 +41,7 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
   onSave,
   assetToEdit,
   existingCodes,
+  existingDnis = [],
 }) => {
   if (!isOpen) return null;
 
@@ -49,10 +55,22 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
   const [numeroSerie, setNumeroSerie] = useState(assetToEdit?.numeroSerie || '');
   const [ubicacion, setUbicacion] = useState(assetToEdit?.ubicacion || '');
   const [codigoActivoFisico, setCodigoActivoFisico] = useState(assetToEdit?.codigoActivoFisico || '');
+  const [dniNumerico, setDniNumerico] = useState<string>(() => {
+    if (assetToEdit?.dniNumerico && /^\d{8}$/.test(assetToEdit.dniNumerico)) {
+      return assetToEdit.dniNumerico;
+    }
+    return generateRandomToolDni(existingDnis);
+  });
   const [condicionFisica, setCondicionFisica] = useState<AssetCondition>(assetToEdit?.condicionFisica || 'operativo');
   const [estado, setEstado] = useState<AssetStatus>(assetToEdit?.estado || 'disponible');
   const [fotoUrl, setFotoUrl] = useState<string>(assetToEdit?.fotoUrl || '');
   const [notas, setNotas] = useState(assetToEdit?.notas || '');
+
+  // Regenerate random 8-digit tool DNI
+  const handleRegenerateDni = () => {
+    const newDni = generateRandomToolDni(existingDnis);
+    setDniNumerico(newDni);
+  };
 
   // Metrological Calibration fields
   const [requiereCalibracion, setRequiereCalibracion] = useState<boolean>(
@@ -198,9 +216,14 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
         }
       : undefined;
 
+    const finalDni = (dniNumerico || '').trim();
+    const validDni = /^\d{8}$/.test(finalDni) ? finalDni : generateRandomToolDni(existingDnis);
+
     const assetData: PhysicalAsset = {
       id: assetToEdit?.id || `asset-${Date.now()}`,
       codigoActivoFisico: codigoActivoFisico.trim().toUpperCase(),
+      codigoMnemotecnico: codigoActivoFisico.trim().toUpperCase(),
+      dniNumerico: validDni,
       descripcion: descripcion.trim(),
       categoria,
       familia: categoria.toUpperCase(),
@@ -236,10 +259,10 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                {assetToEdit ? 'Editar Activo Físico' : 'Plaquetear / Registrar Nueva Herramienta o Dado'}
+                {assetToEdit ? 'Editar Ficha de Equipo / Activo Físico' : 'Plaquetear / Registrar Nueva Herramienta o Dado'}
               </h3>
               <p className="text-xs text-slate-500">
-                Asignación de código físico industrial y ubicación en sombra
+                Doble codificación industrial (Código en Texto + DNI 8 dígitos) y ubicación en pañol
               </p>
             </div>
           </div>
@@ -254,23 +277,74 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
-          {/* Physical Code Banner */}
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between">
-            <div className="flex-1 mr-4">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block">
-                Código de Activo Físico / Placa (Imprimible en QR):
+          {/* Dual Coding Banner: Texto + DNI 8 Dígitos */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-slate-50 to-blue-50 border border-amber-300 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                <Binary className="w-4 h-4 text-amber-600" />
+                Sistema Oficial de Doble Codificación
               </span>
-              <input
-                type="text"
-                value={codigoActivoFisico}
-                onChange={(e) => setCodigoActivoFisico(e.target.value.toUpperCase())}
-                className="font-mono text-base font-black text-slate-900 bg-transparent border-b border-amber-400 focus:outline-none focus:border-amber-600 w-full"
-                placeholder="DAD-IMP-1/2-17MM-001"
-              />
+              <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                Buscable por ambos códigos
+              </span>
             </div>
-            <div className="text-right">
-              <span className="text-[10px] text-slate-500 block">Nomenclatura</span>
-              <span className="text-[11px] font-bold text-emerald-700">✓ Normalizada</span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 1. Código Texto Automático */}
+              <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                    1. Código en Texto (Mnemotécnico):
+                  </span>
+                  <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                    Automático
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={codigoActivoFisico}
+                  onChange={(e) => setCodigoActivoFisico(e.target.value.toUpperCase())}
+                  className="font-mono text-sm sm:text-base font-black text-slate-900 bg-transparent border-b border-amber-400 focus:outline-none focus:border-amber-600 w-full"
+                  placeholder="Ej: PIST-ED-001 o DAD-IMP-1/2-17MM-001"
+                  required
+                />
+                <span className="text-[9px] text-slate-400 mt-1 block">
+                  Placa alfanumérica imprimible en QR
+                </span>
+              </div>
+
+              {/* 2. DNI Numérico Aleatorio Único de 8 Dígitos */}
+              <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-800 flex items-center gap-1">
+                    <Hash className="w-3 h-3 text-blue-600" /> 2. DNI Numérico (8 Dígitos):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRegenerateDni}
+                    className="inline-flex items-center gap-1 text-[9px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 transition cursor-pointer"
+                    title="Generar otro DNI aleatorio de 8 dígitos único"
+                  >
+                    <RotateCw className="w-2.5 h-2.5" />
+                    Aleatorio
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  maxLength={8}
+                  value={dniNumerico}
+                  onChange={(e) => {
+                    const onlyDigits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                    setDniNumerico(onlyDigits);
+                  }}
+                  className="font-mono text-sm sm:text-base font-black text-blue-900 bg-transparent border-b border-blue-400 focus:outline-none focus:border-blue-600 w-full tracking-wider"
+                  placeholder="Ej: 84920173"
+                  required
+                />
+                <span className="text-[9px] text-slate-400 mt-1 block">
+                  Identificador numérico único para escáner y teclado
+                </span>
+              </div>
             </div>
           </div>
 

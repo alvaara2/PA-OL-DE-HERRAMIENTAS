@@ -76,6 +76,7 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
       const q = searchTerm.toLowerCase();
       return (
         asset.codigoActivoFisico.toLowerCase().includes(q) ||
+        (asset.dniNumerico && asset.dniNumerico.toLowerCase().includes(q)) ||
         asset.descripcion.toLowerCase().includes(q) ||
         asset.marca.toLowerCase().includes(q) ||
         (asset.calibracion?.numeroCertificado || '').toLowerCase().includes(q) ||
@@ -315,10 +316,17 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
                       isBlocked ? 'bg-rose-50/50 hover:bg-rose-50/80' : 'hover:bg-slate-50/80'
                     }`}
                   >
-                    <td className="p-3.5 font-mono font-bold text-slate-900">
-                      <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200">
-                        {asset.codigoActivoFisico}
-                      </span>
+                    <td className="p-3.5 font-mono">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-200 font-black text-xs">
+                          {asset.codigoActivoFisico}
+                        </span>
+                        {asset.dniNumerico && (
+                          <span className="bg-blue-50 text-blue-900 px-2 py-0.5 rounded border border-blue-200 font-black text-[10px]">
+                            DNI {asset.dniNumerico}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="p-3.5">

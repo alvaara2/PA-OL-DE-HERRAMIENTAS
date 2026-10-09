@@ -165,7 +165,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                   type="text"
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                  placeholder="Ej: DAD-IMP-1/2-17MM-001 o TAL-DEW-001"
+                  placeholder="Ej: PIST-ED-001 o DNI 84920173..."
                   className="w-full pl-3.5 pr-8 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-xs"
                 />
               </div>

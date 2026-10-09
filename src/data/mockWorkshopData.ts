@@ -119,6 +119,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-torq-1',
     codigoActivoFisico: 'TORQ-SNA-001',
+    codigoMnemotecnico: 'TORQ-SNA-001',
+    dniNumerico: '84920173',
     descripcion: 'Torquímetro de Click Micrométrico Snap-on 50-250 Ft-Lb 1/2"',
     categoria: 'torquimetro',
     familia: 'TORQUIMETROS',
@@ -159,6 +161,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-torq-2',
     codigoActivoFisico: 'TORQ-PRO-001',
+    codigoMnemotecnico: 'TORQ-PRO-001',
+    dniNumerico: '62019485',
     descripcion: 'Torquímetro de Precisión Proto 3/8" 20-100 Ft-Lb',
     categoria: 'torquimetro',
     familia: 'TORQUIMETROS',
@@ -198,6 +202,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-ver-1',
     codigoActivoFisico: 'VER-MIT-001',
+    codigoMnemotecnico: 'VER-MIT-001',
+    dniNumerico: '38194026',
     descripcion: 'Calibrador Pie de Rey Vernier Digital Mitutoyo 0-150mm (0.01mm)',
     categoria: 'instrumento_medicion',
     familia: 'METROLOGIA',
@@ -237,6 +243,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-man-1',
     codigoActivoFisico: 'MAN-WIK-001',
+    codigoMnemotecnico: 'MAN-WIK-001',
+    dniNumerico: '59201487',
     descripcion: 'Manómetro Patrón de Presión Hidráulica WIKA 0-600 PSI Glicerina',
     categoria: 'instrumento_medicion',
     familia: 'METROLOGIA',
@@ -274,6 +282,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-1',
     codigoActivoFisico: 'DAD-IMP-1/2-17MM-001',
+    codigoMnemotecnico: 'DAD-IMP-1/2-17MM-001',
+    dniNumerico: '74892015',
     descripcion: 'Dado de Impacto 17mm Encastre 1/2" 6 Puntas (Fosfatado)',
     categoria: 'dado_impacto',
     familia: 'DADOS',
@@ -293,6 +303,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-2',
     codigoActivoFisico: 'DAD-IMP-1/2-19MM-001',
+    codigoMnemotecnico: 'DAD-IMP-1/2-19MM-001',
+    dniNumerico: '19482056',
     descripcion: 'Dado de Impacto 19mm Encastre 1/2" 6 Puntas',
     categoria: 'dado_impacto',
     familia: 'DADOS',
@@ -310,6 +322,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-3',
     codigoActivoFisico: 'DAD-IMP-3/4-24MM-001',
+    codigoMnemotecnico: 'DAD-IMP-3/4-24MM-001',
+    dniNumerico: '90318472',
     descripcion: 'Dado de Impacto 24mm Encastre 3/4" Alto Torque',
     categoria: 'dado_impacto',
     familia: 'DADOS',
@@ -328,6 +342,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-4',
     codigoActivoFisico: 'EXT-1/2-10IN-001',
+    codigoMnemotecnico: 'EXT-1/2-10IN-001',
+    dniNumerico: '45829103',
     descripcion: 'Barra de Extensión de Impacto 10 Pulgadas Encastre 1/2"',
     categoria: 'extension',
     familia: 'ACCESORIOS',
@@ -346,6 +362,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-6',
     codigoActivoFisico: 'TAL-DEW-001',
+    codigoMnemotecnico: 'TAL-DEW-001',
+    dniNumerico: '28401957',
     descripcion: 'Taladro Percutor Inalámbrico DeWalt 20V MAX XR Brushless',
     categoria: 'herramienta_electrica',
     familia: 'TALADROS',
@@ -362,6 +380,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-7',
     codigoActivoFisico: 'AMO-MAK-001',
+    codigoMnemotecnico: 'AMO-MAK-001',
+    dniNumerico: '81729403',
     descripcion: 'Amoladora Angular Makita 4-1/2" 840W con Guarda de Seguridad',
     categoria: 'herramienta_electrica',
     familia: 'AMOLADORAS',
@@ -378,6 +398,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-8',
     codigoActivoFisico: 'PIST-ING-001',
+    codigoMnemotecnico: 'PIST-ING-001',
+    dniNumerico: '63910482',
     descripcion: 'Pistola de Impacto Neumática Ingersoll Rand 1/2" Titanio',
     categoria: 'herramienta_neumatica',
     familia: 'PISTOLAS_NEUMATICAS',
@@ -395,6 +417,8 @@ export const INITIAL_ASSETS: PhysicalAsset[] = [
   {
     id: 'ast-9',
     codigoActivoFisico: 'LLAV-COMB-19MM-001',
+    codigoMnemotecnico: 'LLAV-COMB-19MM-001',
+    dniNumerico: '50291847',
     descripcion: 'Llave Combinada Corona/Boca 19mm Cromo Vanadio',
     categoria: 'llave_combinada',
     familia: 'LLAVES',

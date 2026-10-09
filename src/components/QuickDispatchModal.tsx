@@ -78,12 +78,14 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
         t.cargo.toLowerCase().includes(techSearchTerm.toLowerCase()))
   );
 
-  // Filtered available assets to add
+  // Filtered available assets to add (searchable by text code, 8-digit DNI, description or location)
   const filteredAssets = availableAssets.filter((a) => {
     if (selectedAssetIds.includes(a.id)) return false;
-    const q = assetSearchQuery.toLowerCase();
+    const q = assetSearchQuery.toLowerCase().trim();
     return (
       a.codigoActivoFisico.toLowerCase().includes(q) ||
+      (a.dniNumerico && a.dniNumerico.toLowerCase().includes(q)) ||
+      (a.codigoMnemotecnico && a.codigoMnemotecnico.toLowerCase().includes(q)) ||
       a.descripcion.toLowerCase().includes(q) ||
       a.ubicacion.toLowerCase().includes(q) ||
       a.marca.toLowerCase().includes(q)
@@ -100,7 +102,7 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
     return evalCal.estaBloqueadoPorCalibracion;
   });
 
-  // Handle scanned code (Tool QR or Technician Fotocheck QR)
+  // Handle scanned code (Tool QR / Text Code / 8-digit DNI or Technician Fotocheck QR)
   const handleQrScanned = (code: string) => {
     const cleanCode = code.trim().toUpperCase();
 
@@ -114,9 +116,12 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
       return;
     }
 
-    // 2. Check if it's an Asset Code
+    // 2. Check if it's an Asset Code (matches text code or 8-digit DNI)
     const foundAsset = availableAssets.find(
-      (a) => a.codigoActivoFisico.toUpperCase() === cleanCode
+      (a) =>
+        a.codigoActivoFisico.toUpperCase() === cleanCode ||
+        (a.dniNumerico && a.dniNumerico.toUpperCase() === cleanCode) ||
+        (a.codigoMnemotecnico && a.codigoMnemotecnico.toUpperCase() === cleanCode)
     );
     if (foundAsset) {
       // Check calibration safety block!
@@ -128,12 +133,12 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
 
       if (!selectedAssetIds.includes(foundAsset.id)) {
         setSelectedAssetIds((prev) => [...prev, foundAsset.id]);
-        showNotification(`✓ Pieza agregada: ${foundAsset.codigoActivoFisico} - ${foundAsset.descripcion}`);
+        showNotification(`✓ Pieza agregada: ${foundAsset.codigoActivoFisico} [DNI: ${foundAsset.dniNumerico || '-'}] - ${foundAsset.descripcion}`);
       }
       return;
     }
 
-    showNotification(`⚠️ El código QR [${code}] no corresponde a un técnico registrado ni a una herramienta disponible.`, true);
+    showNotification(`⚠️ El código [${code}] no corresponde a un técnico registrado ni a una herramienta disponible.`, true);
   };
 
   const handleAddAssetWithSafetyCheck = (asset: PhysicalAsset) => {
@@ -486,9 +491,16 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="font-mono text-xs font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 shrink-0">
-                            {asset.codigoActivoFisico}
-                          </span>
+                          <div className="flex flex-col gap-0.5 shrink-0">
+                            <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                              {asset.codigoActivoFisico}
+                            </span>
+                            {asset.dniNumerico && (
+                              <span className="font-mono text-[10px] font-bold text-blue-800 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                DNI {asset.dniNumerico}
+                              </span>
+                            )}
+                          </div>
                           <div className="min-w-0">
                             <p className="text-xs font-bold text-slate-900 truncate">
                               {asset.descripcion}
@@ -537,7 +549,7 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
                     type="text"
                     value={assetSearchQuery}
                     onChange={(e) => setAssetSearchQuery(e.target.value)}
-                    placeholder="Buscar por código (ej. DAD-17, TORQ), descripción o estante..."
+                    placeholder="Buscar por código texto (PIST-ED-001) o DNI 8 dígitos (84920173)..."
                     className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
@@ -556,10 +568,15 @@ export const QuickDispatchModal: React.FC<QuickDispatchModalProps> = ({
                             isBlocked ? 'bg-rose-50/70 hover:bg-rose-100' : 'hover:bg-slate-50'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-slate-900 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-slate-900 font-bold bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.5 rounded text-[11px] shrink-0">
                               {asset.codigoActivoFisico}
                             </span>
+                            {asset.dniNumerico && (
+                              <span className="font-mono text-blue-800 font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] shrink-0">
+                                DNI {asset.dniNumerico}
+                              </span>
+                            )}
                             <span className="text-slate-800 font-medium truncate max-w-xs">
                               {asset.descripcion}
                             </span>

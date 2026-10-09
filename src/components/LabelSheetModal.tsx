@@ -167,10 +167,17 @@ export const LabelSheetModal: React.FC<LabelSheetModalProps> = ({
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      {/* Physical Code in High-Visibility Monospace */}
-                      <p className="text-[11px] font-mono font-black text-black tracking-tight leading-none truncate bg-yellow-100 px-1 py-0.5 rounded border border-yellow-300 inline-block mb-1">
-                        {asset.codigoActivoFisico}
-                      </p>
+                      {/* Physical Code & DNI 8 Digits in High-Visibility Monospace */}
+                      <div className="flex flex-wrap items-center gap-1 mb-1">
+                        <span className="text-[10px] font-mono font-black text-black tracking-tight leading-none truncate bg-yellow-100 px-1 py-0.5 rounded border border-yellow-300">
+                          {asset.codigoActivoFisico}
+                        </span>
+                        {asset.dniNumerico && (
+                          <span className="text-[9px] font-mono font-black text-blue-900 bg-blue-100 px-1 py-0.5 rounded border border-blue-300">
+                            DNI: {asset.dniNumerico}
+                          </span>
+                        )}
+                      </div>
                       
                       <p className="text-[9px] font-bold text-gray-800 line-clamp-2 leading-tight">
                         {asset.descripcion}
