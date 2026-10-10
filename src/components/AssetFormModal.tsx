@@ -25,6 +25,7 @@ import {
   suggestLocation 
 } from '../utils/assetCoder';
 import { getAutoReferenceImage } from '../utils/imageCatalog';
+import { compressToolImage } from '../utils/imageCompressor';
 
 interface AssetFormModalProps {
   isOpen: boolean;
@@ -159,19 +160,42 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     }
   };
 
-  // Handle file photo upload
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Photo compression states
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+  const [compressionInfo, setCompressionInfo] = useState<{
+    width: number;
+    height: number;
+    originalKb?: number;
+    compressedKb: number;
+  } | null>(null);
+  const [compressionError, setCompressionError] = useState<string | null>(null);
+
+  // Handle file photo upload with HTML Canvas automatic compression (Max 600px, JPEG 70%)
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target?.result as string;
-      if (dataUrl) {
-        setFotoUrl(dataUrl);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsCompressingPhoto(true);
+    setCompressionError(null);
+
+    try {
+      // Compress and resize using HTML canvas: max width 600px, JPEG quality 0.7 (70%)
+      const result = await compressToolImage(file, 600, 0.7);
+      setFotoUrl(result.dataUrl);
+      setCompressionInfo({
+        width: result.width,
+        height: result.height,
+        originalKb: result.originalSizeKb,
+        compressedKb: result.compressedSizeKb,
+      });
+    } catch (err) {
+      console.error('Error al comprimir imagen de herramienta:', err);
+      setCompressionError('No se pudo procesar la imagen seleccionada. Intente con otro archivo JPG o PNG.');
+    } finally {
+      setIsCompressingPhoto(false);
+      // Reset input value so user can upload the same file again if desired
+      e.target.value = '';
+    }
   };
 
   // Handle Official Certificate PDF Upload
@@ -195,11 +219,22 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!codigoActivoFisico.trim() || !descripcion.trim()) {
       alert('El código físico y la descripción técnica son requeridos.');
       return;
+    }
+
+    // Safety check: If fotoUrl is an uncompressed base64 data URL (e.g. pasted directly), compress it to max 600px, JPEG 70%
+    let finalPhoto = fotoUrl.trim();
+    if (finalPhoto.startsWith('data:image/')) {
+      try {
+        const comp = await compressToolImage(finalPhoto, 600, 0.7);
+        finalPhoto = comp.dataUrl;
+      } catch (e) {
+        console.warn('No se pudo recomprimir dataURL antes de guardar, usando original:', e);
+      }
     }
 
     const calData: CalibrationData | undefined = requiereCalibracion
@@ -236,7 +271,7 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
       ubicacion: ubicacion.trim() || 'Estante General',
       estado,
       condicionFisica,
-      fotoUrl: fotoUrl || getAutoReferenceImage(descripcion, marca),
+      fotoUrl: finalPhoto || getAutoReferenceImage(descripcion, marca),
       notas: notas.trim() || undefined,
       fechaAlta: assetToEdit?.fechaAlta || new Date().toISOString().split('T')[0],
       prestamoActivoId: assetToEdit?.prestamoActivoId,
@@ -470,13 +505,14 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
               </div>
 
               <div className="flex-1 space-y-2">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg transition font-bold border border-slate-200 shadow-xs">
                     <Camera className="w-3.5 h-3.5 text-blue-600" />
-                    Subir Foto Real
+                    {isCompressingPhoto ? 'Comprimiendo...' : 'Subir Foto Real'}
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={isCompressingPhoto}
                       onChange={handlePhotoUpload}
                       className="hidden"
                     />
@@ -484,21 +520,71 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setFotoUrl(getAutoReferenceImage(descripcion, marca))}
+                    onClick={() => {
+                      setFotoUrl(getAutoReferenceImage(descripcion, marca));
+                      setCompressionInfo(null);
+                      setCompressionError(null);
+                    }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg transition font-bold border border-slate-200 shadow-xs"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     Auto-asignar Foto Referencial
                   </button>
+
+                  {fotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFotoUrl('');
+                        setCompressionInfo(null);
+                        setCompressionError(null);
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1.5 text-slate-400 hover:text-rose-600 text-xs transition"
+                      title="Quitar foto"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Quitar
+                    </button>
+                  )}
                 </div>
+
+                {/* Compression Status Indicators */}
+                {isCompressingPhoto && (
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-800 text-xs font-bold animate-pulse">
+                    <RotateCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                    <span>Optimizando foto con Canvas HTML (máx. 600px ancho, JPEG 70%)...</span>
+                  </div>
+                )}
+
+                {compressionInfo && (
+                  <div className="flex items-center gap-1.5 p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[11px] font-bold">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      ✓ Imagen comprimida: {compressionInfo.width}×{compressionInfo.height}px • JPEG 70% ({compressionInfo.compressedKb} KB
+                      {compressionInfo.originalKb ? ` • antes ${compressionInfo.originalKb} KB` : ''})
+                    </span>
+                  </div>
+                )}
+
+                {compressionError && (
+                  <div className="p-2 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] font-bold">
+                    {compressionError}
+                  </div>
+                )}
 
                 <input
                   type="text"
                   value={fotoUrl}
-                  onChange={(e) => setFotoUrl(e.target.value)}
+                  onChange={(e) => {
+                    setFotoUrl(e.target.value);
+                    setCompressionInfo(null);
+                  }}
                   placeholder="O pegue una URL de imagen..."
                   className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-600 font-mono"
                 />
+                <span className="text-[10px] text-slate-400 block">
+                  Las fotos se redimensionan automáticamente a máx. 600px (JPEG 70%) para no saturar la memoria local del navegador.
+                </span>
               </div>
             </div>
           </div>

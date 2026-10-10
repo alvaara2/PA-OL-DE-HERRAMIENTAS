@@ -48,6 +48,7 @@ import {
 } from './utils/indexedDBStorage';
 import { dispatchKardexEntriesToAppsScript } from './utils/googleSheetsSync';
 import { generateRandomToolDni } from './utils/assetCoder';
+import { safeSaveAssetsToLocalStorage } from './utils/storageHelper';
 import { AlertOctagon, RotateCw, Lock, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -276,6 +277,12 @@ export default function App() {
   const [manualCheckpointToast, setManualCheckpointToast] = useState<string | null>(null);
   const manualRestoreFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Storage Quota Warning banner state
+  const [storageQuotaWarning, setStorageQuotaWarning] = useState<{
+    message: string;
+    affectedAssetCode?: string;
+  } | null>(null);
+
   // Synchronize with localStorage
   useEffect(() => {
     try {
@@ -295,7 +302,12 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.ASSETS, JSON.stringify(assets));
+      const res = safeSaveAssetsToLocalStorage(STORAGE_KEYS.ASSETS, assets);
+      if (res.fallbackApplied && !storageQuotaWarning) {
+        setStorageQuotaWarning({
+          message: 'Se optimizó el almacenamiento local para evitar saturación de memoria. Todas las herramientas y sus códigos están 100% protegidos.',
+        });
+      }
     } catch (e) {
       console.warn('Assets storage error', e);
     }
@@ -794,26 +806,40 @@ export default function App() {
 
     setAssets((prev) => {
       const exists = prev.some((a) => a.id === assetToSave.id);
-      if (exists) {
-        return prev.map((a) => (a.id === assetToSave.id ? assetToSave : a));
-      }
-      // New asset: append Kardex entrada event
-      const kdx: KardexEntry = {
-        id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        fecha: new Date().toISOString(),
-        tipoEvento: 'entrada_inicial',
-        assetId: assetToSave.id,
-        codigoActivoFisico: assetToSave.codigoActivoFisico,
-        descripcion: assetToSave.descripcion,
-        almaceneroNombre: activeStorekeeper.nombreCompleto,
-        condicion: assetToSave.condicionFisica,
-        observaciones: 'Ingreso manual a inventario de pañol',
-      };
-      setKardex((k) => [kdx, ...k]);
-      dispatchKardexEntriesToAppsScript([kdx], activeStorekeeper.nombreCompleto);
+      const updatedList = exists
+        ? prev.map((a) => (a.id === assetToSave.id ? assetToSave : a))
+        : [assetToSave, ...prev];
 
-      return [assetToSave, ...prev];
+      // Safely persist with QuotaExceeded fallback protection
+      const saveResult = safeSaveAssetsToLocalStorage(STORAGE_KEYS.ASSETS, updatedList, assetToSave);
+
+      if (saveResult.fallbackApplied) {
+        setStorageQuotaWarning({
+          message: `Límite de almacenamiento del navegador (localStorage) alcanzado. La herramienta [${assetToSave.codigoActivoFisico}] se guardó correctamente conservando todos sus datos técnicos, pero sin la foto pesada para evitar la pérdida del registro.`,
+          affectedAssetCode: assetToSave.codigoActivoFisico,
+        });
+      }
+
+      // New asset: append Kardex entrada event
+      if (!exists) {
+        const kdx: KardexEntry = {
+          id: `kdx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          fecha: new Date().toISOString(),
+          tipoEvento: 'entrada_inicial',
+          assetId: assetToSave.id,
+          codigoActivoFisico: assetToSave.codigoActivoFisico,
+          descripcion: assetToSave.descripcion,
+          almaceneroNombre: activeStorekeeper.nombreCompleto,
+          condicion: assetToSave.condicionFisica,
+          observaciones: 'Ingreso manual a inventario de pañol',
+        };
+        setKardex((k) => [kdx, ...k]);
+        dispatchKardexEntriesToAppsScript([kdx], activeStorekeeper.nombreCompleto);
+      }
+
+      return saveResult.assetsSaved;
     });
+
     broadcastRealtimeSync();
   };
 
@@ -1124,7 +1150,16 @@ export default function App() {
     }));
     setKardex((prev) => [...newKardex, ...prev]);
 
-    setAssets((prev) => [...finalizedAssets, ...prev]);
+    setAssets((prev) => {
+      const merged = [...finalizedAssets, ...prev];
+      const saveRes = safeSaveAssetsToLocalStorage(STORAGE_KEYS.ASSETS, merged);
+      if (saveRes.fallbackApplied) {
+        setStorageQuotaWarning({
+          message: 'Se cargaron las herramientas conservando todos sus datos técnicos. Se optimizó el espacio de imágenes para no superar la capacidad local del navegador.',
+        });
+      }
+      return saveRes.assetsSaved;
+    });
     setCurrentTab('catalog');
     broadcastRealtimeSync();
   };
@@ -1422,6 +1457,38 @@ export default function App() {
               type="button"
               onClick={() => setManualCheckpointToast(null)}
               className="text-white hover:text-emerald-200"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Storage Quota Warning Banner */}
+      {storageQuotaWarning && (
+        <div className="no-print bg-amber-600 text-white px-4 py-3 shadow-md border-b border-amber-700 animate-in fade-in">
+          <div className="max-w-7xl mx-auto flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-200 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-xs sm:text-sm flex items-center gap-1.5">
+                  <span>Aviso de Protección de Almacenamiento Local (localStorage)</span>
+                  {storageQuotaWarning.affectedAssetCode && (
+                    <span className="font-mono bg-amber-700/80 px-1.5 py-0.2 rounded text-[11px] text-amber-100">
+                      [{storageQuotaWarning.affectedAssetCode}]
+                    </span>
+                  )}
+                </p>
+                <p className="text-xs text-amber-100 mt-0.5 leading-relaxed">
+                  {storageQuotaWarning.message}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStorageQuotaWarning(null)}
+              className="p-1 rounded-lg hover:bg-amber-700 text-amber-100 hover:text-white transition shrink-0"
+              title="Cerrar aviso"
             >
               <X className="w-4 h-4" />
             </button>
