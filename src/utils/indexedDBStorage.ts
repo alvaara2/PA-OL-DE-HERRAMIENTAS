@@ -312,25 +312,31 @@ export function parseCheckpointFile(file: File): Promise<SystemCheckpoint> {
         const parsed = JSON.parse(text);
 
         // Validation of essential checkpoint payload
-        if (!parsed || !parsed.data) {
-          throw new Error('El archivo no contiene un formato de checkpoint válido.');
+        const assetsList = parsed.data?.assets || parsed.herramientas || parsed.assets || [];
+        const techList = parsed.data?.technicians || parsed.trabajadores || parsed.personal || [];
+        const dispatchList = parsed.data?.dispatches || parsed.prestamos || [];
+        const storekeeperList = parsed.data?.storekeepers || parsed.encargados || [];
+        const kardexList = parsed.data?.kardex || [];
+
+        if (!Array.isArray(assetsList)) {
+          throw new Error('El archivo no contiene un formato de checkpoint o inventario válido.');
         }
 
         const checkpoint: SystemCheckpoint = {
           id: parsed.id || `chk-uploaded-${Date.now()}`,
           nombre: parsed.nombre || `Restaurado de archivo: ${file.name}`,
           descripcion: parsed.descripcion || 'Punto importado desde archivo JSON externo',
-          timestamp: parsed.timestamp || new Date().toISOString(),
+          timestamp: parsed.timestamp || parsed.fechaBackup || new Date().toISOString(),
           tipo: 'manual',
-          totalActivos: Array.isArray(parsed.data.assets) ? parsed.data.assets.length : 0,
-          totalVales: Array.isArray(parsed.data.dispatches) ? parsed.data.dispatches.length : 0,
-          totalTecnicos: Array.isArray(parsed.data.technicians) ? parsed.data.technicians.length : 0,
+          totalActivos: assetsList.length,
+          totalVales: dispatchList.length,
+          totalTecnicos: techList.length,
           data: {
-            assets: parsed.data.assets || [],
-            technicians: parsed.data.technicians || [],
-            dispatches: parsed.data.dispatches || [],
-            storekeepers: parsed.data.storekeepers || [],
-            kardex: parsed.data.kardex || [],
+            assets: assetsList,
+            technicians: techList,
+            dispatches: dispatchList,
+            storekeepers: storekeeperList,
+            kardex: kardexList,
           },
         };
 

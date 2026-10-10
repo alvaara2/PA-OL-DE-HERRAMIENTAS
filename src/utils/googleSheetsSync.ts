@@ -110,6 +110,13 @@ export async function dispatchKardexEntriesToAppsScript(
  */
 export async function dispatchToolToAppsScript(asset: PhysicalAsset): Promise<boolean> {
   const dniNum = asset.dniNumerico || '-';
+  const rawCert = asset.calibracion?.certificadoPdfUrl || asset.certificadoPdfUrl || '';
+  const enlaceCertificado = rawCert
+    ? rawCert.startsWith('data:')
+      ? 'Certificado PDF Adjunto (Base64)'
+      : rawCert
+    : '-';
+
   const fila = [
     asset.id,
     asset.codigoActivoFisico, // Código Mnemotécnico
@@ -124,6 +131,7 @@ export async function dispatchToolToAppsScript(asset: PhysicalAsset): Promise<bo
     asset.condicionFisica.toUpperCase(),
     asset.calibracion?.requiereCalibracion ? 'SI' : 'NO',
     asset.calibracion?.fechaVencimiento || '-',
+    enlaceCertificado,       // Enlace / URL del Certificado PDF (Drive / Web)
     new Date().toLocaleString('es-PE'),
   ];
 

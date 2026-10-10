@@ -106,3 +106,125 @@ export function downloadPdfFromDataUrl(dataUrl: string, filename: string): void 
     console.error('Error al descargar PDF:', err);
   }
 }
+
+/**
+ * Checks if a string is a valid web URL (http:// or https://)
+ */
+export function isWebUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim().toLowerCase();
+  return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+}
+
+/**
+ * Checks if a URL points to Google Drive / Google Docs
+ */
+export function isGoogleDriveUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim().toLowerCase();
+  return trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com');
+}
+
+/**
+ * Extracts Google Drive File ID from multiple link variations:
+ * - https://drive.google.com/file/d/XYZ/view?usp=sharing
+ * - https://drive.google.com/open?id=XYZ
+ * - https://drive.google.com/uc?id=XYZ
+ * - https://docs.google.com/file/d/XYZ/...
+ */
+export function extractGoogleDriveFileId(url: string): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+
+  // Pattern 1: /file/d/{FILE_ID}
+  const matchFileD = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchFileD && matchFileD[1]) return matchFileD[1];
+
+  // Pattern 2: ?id={FILE_ID} or &id={FILE_ID}
+  const matchParamId = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (matchParamId && matchParamId[1]) return matchParamId[1];
+
+  // Pattern 3: /d/{FILE_ID}
+  const matchD = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (matchD && matchD[1]) return matchD[1];
+
+  return null;
+}
+
+/**
+ * Transforms any Google Drive URL into its official embeddable preview format:
+ * https://drive.google.com/file/d/{FILE_ID}/preview
+ */
+export function formatGoogleDriveEmbedUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const fileId = extractGoogleDriveFileId(url);
+  if (fileId) {
+    return `https://drive.google.com/file/d/${fileId}/preview`;
+  }
+  return url.trim();
+}
+
+/**
+ * Returns the URL ready to be displayed in an <iframe>.
+ * Automatically transforms Google Drive links to /preview format.
+ */
+export function getEmbeddableCertificateUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (isGoogleDriveUrl(trimmed)) {
+    return formatGoogleDriveEmbedUrl(trimmed);
+  }
+  return trimmed;
+}
+
+/**
+ * Returns the canonical original web URL to open in a new tab or browser.
+ * For Google Drive, formats as the full view link: https://drive.google.com/file/d/{FILE_ID}/view
+ */
+export function getOriginalCertificateUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  const fileId = extractGoogleDriveFileId(trimmed);
+  if (fileId && isGoogleDriveUrl(trimmed)) {
+    return `https://drive.google.com/file/d/${fileId}/view`;
+  }
+  return trimmed;
+}
+
+/**
+ * Safely opens a certificate in a new browser tab.
+ * Works seamlessly with Google Drive URLs, external web links, and Base64 data URLs.
+ */
+export function openCertificateInNewTab(url: string, filename = 'certificado_calibracion.pdf'): void {
+  if (!url) {
+    alert('No hay enlace o archivo de certificado configurado.');
+    return;
+  }
+
+  const trimmed = url.trim();
+
+  // 1. Base64 Data URL: convert to Blob URL to avoid browser security blocking of data: navigation
+  if (trimmed.startsWith('data:application/pdf;base64,')) {
+    try {
+      const base64Data = trimmed.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      return;
+    } catch (err) {
+      console.warn('Error al abrir dataURL como Blob, intentando descarga directa:', err);
+      downloadPdfFromDataUrl(trimmed, filename);
+      return;
+    }
+  }
+
+  // 2. Google Drive or Web URL: open original link
+  const originalUrl = getOriginalCertificateUrl(trimmed);
+  window.open(originalUrl, '_blank', 'noopener,noreferrer');
+}

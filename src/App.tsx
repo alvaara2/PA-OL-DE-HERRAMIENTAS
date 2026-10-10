@@ -46,7 +46,7 @@ import {
   exportManualCheckpointJSON, 
   parseFullBackupJSON 
 } from './utils/indexedDBStorage';
-import { dispatchKardexEntriesToAppsScript } from './utils/googleSheetsSync';
+import { dispatchKardexEntriesToAppsScript, dispatchToolToAppsScript } from './utils/googleSheetsSync';
 import { generateRandomToolDni } from './utils/assetCoder';
 import { safeSaveAssetsToLocalStorage } from './utils/storageHelper';
 import { AlertOctagon, RotateCw, Lock, AlertTriangle, CheckCircle2, X } from 'lucide-react';
@@ -841,6 +841,7 @@ export default function App() {
     });
 
     broadcastRealtimeSync();
+    dispatchToolToAppsScript(assetToSave);
   };
 
   const handleDeleteAsset = (id: string) => {

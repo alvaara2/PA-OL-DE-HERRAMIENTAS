@@ -672,10 +672,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                         <button
                           type="button"
                           onClick={() => setSelectedCertificateAsset(asset)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
+                          title="Ver Certificado Oficial (Google Drive, Web o PDF)"
                         >
                           <FileText className="w-3.5 h-3.5" />
-                          <span>📄 Certificado</span>
+                          <span>📄 Ver Certificado</span>
                         </button>
                       </div>
                     )}
@@ -822,10 +823,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                           <button
                             type="button"
                             onClick={() => setSelectedCertificateAsset(asset)}
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] rounded-lg border border-blue-200 transition cursor-pointer"
+                            title="Ver Certificado Oficial (Google Drive, Web o PDF)"
                           >
                             <FileText className="w-3.5 h-3.5" />
-                            <span>📄 Ver Certificado Oficial</span>
+                            <span>📄 Ver Certificado</span>
                           </button>
                         </div>
                       )}
@@ -1168,10 +1170,11 @@ export const CatalogView: React.FC<CatalogViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedCertificateAsset(selectedDetailAsset)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-xs"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                      title="Ver Certificado Oficial (Google Drive, Web o PDF)"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      Ver Certificado PDF Oficial
+                      Ver Certificado
                     </button>
                   </div>
 

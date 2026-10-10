@@ -16,11 +16,17 @@ import {
   Award,
   Lock,
   Unlock,
-  Download
+  Download,
+  Globe
 } from 'lucide-react';
 import { PhysicalAsset, CalibrationData } from '../types/workshop';
 import { evaluateCalibration } from '../utils/calibrationHelper';
 import { CertificatePdfModal } from './CertificatePdfModal';
+import { 
+  isGoogleDriveUrl, 
+  formatGoogleDriveEmbedUrl, 
+  openCertificateInNewTab 
+} from '../utils/pdfHelper';
 import * as XLSX from 'xlsx';
 
 interface MetrologyCalibrationViewProps {
@@ -50,6 +56,8 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
   const [rango, setRango] = useState('');
   const [tipoInstrumento, setTipoInstrumento] = useState('');
   const [pdfDataUrl, setPdfDataUrl] = useState('');
+  const [certUrlInput, setCertUrlInput] = useState('');
+  const [isDriveDetectedInModal, setIsDriveDetectedInModal] = useState(false);
 
   // Filter only assets that require calibration
   const calibratedAssets = assets.filter((a) => a.calibracion?.requiereCalibracion);
@@ -99,7 +107,31 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
     setTolerancia(cal?.toleranciaError || '± 2%');
     setRango(cal?.rangoMedicion || asset.medida || '');
     setTipoInstrumento(cal?.instrumentoTipo || asset.descripcion);
-    setPdfDataUrl(cal?.certificadoPdfUrl || '');
+    const initialUrl = cal?.certificadoPdfUrl || '';
+    setPdfDataUrl(initialUrl);
+    setCertUrlInput(initialUrl.startsWith('data:') ? '' : initialUrl);
+    setIsDriveDetectedInModal(Boolean(initialUrl && isGoogleDriveUrl(initialUrl)));
+  };
+
+  const handleCertUrlInputChange = (val: string) => {
+    setCertUrlInput(val);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      setIsDriveDetectedInModal(false);
+      if (!pdfDataUrl.startsWith('data:')) {
+        setPdfDataUrl('');
+      }
+      return;
+    }
+
+    if (isGoogleDriveUrl(trimmed)) {
+      setIsDriveDetectedInModal(true);
+      const embedUrl = formatGoogleDriveEmbedUrl(trimmed);
+      setPdfDataUrl(embedUrl);
+    } else {
+      setIsDriveDetectedInModal(false);
+      setPdfDataUrl(trimmed);
+    }
   };
 
   const handleSaveRecalibration = (e: React.FormEvent) => {
@@ -125,6 +157,8 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
   const handleFileUploadPdf = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setCertUrlInput('');
+    setIsDriveDetectedInModal(false);
     const reader = new FileReader();
     reader.onload = (evt) => {
       const dataUrl = evt.target?.result as string;
@@ -512,24 +546,64 @@ export const MetrologyCalibrationView: React.FC<MetrologyCalibrationViewProps> =
                 </div>
               </div>
 
-              {/* Upload Certificate File */}
-              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5">
+              {/* Sección de Certificado Oficial: URL Principal + Subida Local */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-slate-700 font-bold block text-xs">
-                    Certificado Oficial en PDF (Laboratorio / Proveedor):
+                    Certificado Oficial de Calibración (Drive, Web o PDF):
                   </label>
                   {pdfDataUrl && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                      ✓ PDF Adjunto
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      {isDriveDetectedInModal ? 'Drive Embebido' : 'Certificado Configurado'}
                     </span>
                   )}
                 </div>
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handleFileUploadPdf}
-                  className="text-xs text-slate-500 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
-                />
+
+                {/* Campo de texto principal: "Enlace / URL del Certificado PDF (Drive, nube o web)" */}
+                <div>
+                  <div className="relative">
+                    <input
+                      type="url"
+                      value={certUrlInput}
+                      onChange={(e) => handleCertUrlInputChange(e.target.value)}
+                      placeholder="Ej: https://drive.google.com/file/d/XYZ/view?... o https://servidor.com/cert.pdf"
+                      className="w-full pl-8 pr-20 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                    <Globe className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                    {pdfDataUrl && (
+                      <button
+                        type="button"
+                        onClick={() => openCertificateInNewTab(pdfDataUrl)}
+                        className="absolute right-1.5 top-1.5 px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold flex items-center gap-1 border border-blue-200 cursor-pointer"
+                        title="Abrir en pestaña nueva"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>Abrir</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {isDriveDetectedInModal && (
+                    <div className="mt-1.5 p-2 bg-blue-50 rounded-lg border border-blue-200 text-[10px] text-blue-900 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>Google Drive detectado: embebido automáticamente (<code className="font-mono">/preview</code>).</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Alternativa complementaria: Subir archivo PDF local */}
+                <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
+                  <label className="text-[11px] text-slate-600 font-medium">
+                    O subir archivo PDF local:
+                  </label>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={handleFileUploadPdf}
+                    className="text-xs text-slate-500 max-w-[210px] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-slate-200 file:text-slate-800 hover:file:bg-slate-300 cursor-pointer"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">

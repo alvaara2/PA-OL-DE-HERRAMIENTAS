@@ -13,7 +13,10 @@ import {
   Trash2,
   Hash,
   RotateCw,
-  Binary
+  Binary,
+  Globe,
+  ExternalLink,
+  Link2
 } from 'lucide-react';
 import { PhysicalAsset, AssetCategory, AssetCondition, AssetStatus, CalibrationData } from '../types/workshop';
 import { 
@@ -26,6 +29,11 @@ import {
 } from '../utils/assetCoder';
 import { getAutoReferenceImage } from '../utils/imageCatalog';
 import { compressToolImage } from '../utils/imageCompressor';
+import { 
+  isGoogleDriveUrl, 
+  formatGoogleDriveEmbedUrl, 
+  openCertificateInNewTab 
+} from '../utils/pdfHelper';
 
 interface AssetFormModalProps {
   isOpen: boolean;
@@ -98,12 +106,20 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     nextYear.setFullYear(nextYear.getFullYear() + 1);
     return nextYear.toISOString().split('T')[0];
   });
-  const [certificadoPdfUrl, setCertificadoPdfUrl] = useState<string>(
-    assetToEdit?.calibracion?.certificadoPdfUrl || (assetToEdit as any)?.certificadoPdfUrl || ''
+  const initialCertUrl = assetToEdit?.calibracion?.certificadoPdfUrl || (assetToEdit as any)?.certificadoPdfUrl || '';
+  const [certificadoPdfUrl, setCertificadoPdfUrl] = useState<string>(initialCertUrl);
+  const [certificadoUrlInput, setCertificadoUrlInput] = useState<string>(
+    initialCertUrl.startsWith('data:') ? '' : initialCertUrl
   );
-  const [pdfFileName, setPdfFileName] = useState<string>(
-    certificadoPdfUrl ? 'Certificado_Oficial_Adjunto.pdf' : ''
+  const [isDriveDetected, setIsDriveDetected] = useState<boolean>(
+    Boolean(initialCertUrl && isGoogleDriveUrl(initialCertUrl))
   );
+  const [pdfFileName, setPdfFileName] = useState<string>(() => {
+    if (!initialCertUrl) return '';
+    if (isGoogleDriveUrl(initialCertUrl)) return 'Google_Drive_Doc.pdf';
+    if (initialCertUrl.startsWith('http')) return 'Documento_Web.pdf';
+    return 'Certificado_Oficial_Adjunto.pdf';
+  });
   const [toleranciaError, setToleranciaError] = useState<string>(
     assetToEdit?.calibracion?.toleranciaError || '± 2%'
   );
@@ -198,6 +214,31 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     }
   };
 
+  // Handle Google Drive / Web URL Certificate input with automatic embedding transformation
+  const handleCertificateUrlInputChange = (val: string) => {
+    setCertificadoUrlInput(val);
+    const trimmed = val.trim();
+    if (!trimmed) {
+      setIsDriveDetected(false);
+      if (!certificadoPdfUrl.startsWith('data:')) {
+        setCertificadoPdfUrl('');
+        setPdfFileName('');
+      }
+      return;
+    }
+
+    if (isGoogleDriveUrl(trimmed)) {
+      setIsDriveDetected(true);
+      const embedUrl = formatGoogleDriveEmbedUrl(trimmed);
+      setCertificadoPdfUrl(embedUrl);
+      setPdfFileName('Certificado_Google_Drive.pdf');
+    } else {
+      setIsDriveDetected(false);
+      setCertificadoPdfUrl(trimmed);
+      setPdfFileName('Certificado_Web.pdf');
+    }
+  };
+
   // Handle Official Certificate PDF Upload
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -209,6 +250,8 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
     }
 
     setPdfFileName(file.name);
+    setCertificadoUrlInput('');
+    setIsDriveDetected(false);
     const reader = new FileReader();
     reader.onload = (evt) => {
       const dataUrl = evt.target?.result as string;
@@ -613,51 +656,100 @@ export const AssetFormModal: React.FC<AssetFormModalProps> = ({
 
             {requiereCalibracion && (
               <div className="space-y-3 pt-2 border-t border-slate-200">
-                {/* PDF Certificate Upload Field */}
-                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                {/* Sección de Certificado de Calibración Oficial */}
+                <div className="p-3.5 bg-white rounded-2xl border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <FileText className="w-4 h-4 text-blue-600" />
-                      Certificado de Calibración Oficial del Proveedor/Laboratorio (PDF Original):
+                      Certificado Oficial de Calibración (Drive, Nube o PDF):
                     </span>
                     {certificadoPdfUrl ? (
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" /> PDF Cargado
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        {isDriveDetected ? 'Drive Embebido' : 'Certificado Configurado'}
                       </span>
                     ) : (
                       <span className="text-[10px] text-slate-400 font-medium">Pendiente</span>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition font-bold text-xs shadow-xs">
-                      <Upload className="w-3.5 h-3.5" />
-                      {certificadoPdfUrl ? 'Reemplazar Certificado PDF' : 'Subir Archivo PDF Oficial (.pdf)'}
-                      <input
-                        type="file"
-                        accept="application/pdf"
-                        onChange={handlePdfUpload}
-                        className="hidden"
-                      />
+                  {/* Campo de texto principal: "Enlace / URL del Certificado PDF (Drive, nube o web)" */}
+                  <div>
+                    <label className="text-slate-700 font-bold block mb-1 text-xs">
+                      Enlace / URL del Certificado PDF (Drive, nube o web):
                     </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={certificadoUrlInput}
+                        onChange={(e) => handleCertificateUrlInputChange(e.target.value)}
+                        placeholder="Ej: https://drive.google.com/file/d/XYZ/view?... o https://servidor.com/cert.pdf"
+                        className="w-full pl-9 pr-24 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-xs font-mono focus:bg-white focus:border-blue-500 focus:outline-none transition"
+                      />
+                      <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      {certificadoPdfUrl && (
+                        <button
+                          type="button"
+                          onClick={() => openCertificateInNewTab(certificadoPdfUrl)}
+                          className="absolute right-2 top-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold flex items-center gap-1 border border-blue-200 transition cursor-pointer"
+                          title="Abrir en pestaña nueva para verificar el certificado"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Abrir</span>
+                        </button>
+                      )}
+                    </div>
 
-                    {certificadoPdfUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCertificadoPdfUrl('');
-                          setPdfFileName('');
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-2 text-rose-600 hover:bg-rose-50 rounded-xl transition font-bold text-xs"
-                        title="Quitar PDF adjunto"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Quitar
-                      </button>
+                    {isDriveDetected && (
+                      <div className="mt-2 p-2.5 bg-blue-50/90 rounded-xl border border-blue-200 flex items-start gap-2 text-[11px] text-blue-900">
+                        <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">✓ Enlace de Google Drive detectado y transformado automáticamente:</p>
+                          <p className="text-[10px] text-blue-700 font-mono mt-0.5 break-all">
+                            {certificadoPdfUrl}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">
+                            Se mostrará en modo embebido dentro del modal sin saturar el almacenamiento del navegador.
+                          </p>
+                        </div>
+                      </div>
                     )}
+                  </div>
+
+                  {/* Complementario: Subida de archivo PDF local */}
+                  <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition font-bold text-xs border border-slate-200 shadow-2xs">
+                        <Upload className="w-3.5 h-3.5 text-slate-500" />
+                        {certificadoPdfUrl.startsWith('data:') ? 'Reemplazar Archivo PDF' : 'O Subir Archivo PDF Local'}
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          onChange={handlePdfUpload}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {certificadoPdfUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCertificadoPdfUrl('');
+                            setCertificadoUrlInput('');
+                            setIsDriveDetected(false);
+                            setPdfFileName('');
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-xl transition font-bold text-xs cursor-pointer"
+                          title="Quitar certificado configurado"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Quitar
+                        </button>
+                      )}
+                    </div>
 
                     {pdfFileName && (
-                      <span className="text-xs font-mono text-slate-600 truncate max-w-[220px]">
+                      <span className="text-xs font-mono text-slate-600 truncate max-w-[240px]">
                         📄 {pdfFileName}
                       </span>
                     )}
